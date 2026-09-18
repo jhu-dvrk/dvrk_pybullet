@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from pathlib import Path
 from typing import Sequence
 
@@ -22,7 +23,28 @@ class SimulatorConfig:
     state_publish_rate_hz: float = 100.0
     generated_root: Path | None = None
     command_queue_capacity: int = 32
+    grasp: "GraspConfig" = None
     scene: str | None = None
+
+
+@dataclass(frozen=True)
+class GraspConfig:
+    show_grasps: bool = True
+    max_grasps_per_object: int = 1
+    policy: str = "pose_error"
+    arm_policies: dict[str, str] = None
+    close_threshold_rad: float = 0.04
+    release_threshold_rad: float = 0.08
+    break_distance_m: float = 0.005
+    break_orientation_rad: float = 0.2617993877991494
+    break_tension_force_n: float = 10.0
+    break_shear_force_n: float = 10.0
+    break_torque_nm: float = 0.25
+    break_load_duration_s: float = 0.05
+    max_force_n: float = 100.0
+    constraint_erp: float = 0.8
+    contact_region_offset_m: tuple[float, float, float] = (0.0, 0.0, -0.003)
+    contact_region_radius_m: float = 0.008
 
 
 def _boolean(value, *, source: Path, field: str) -> bool:
@@ -47,6 +69,68 @@ def load_simulator_config(path: str | Path) -> SimulatorConfig:
         raise ValueError(f"{source}: simulator rates must be positive")
     if capacity <= 0:
         raise ValueError(f"{source}: command_queue_capacity must be positive")
+    grasp_document = document.get("grasp", {})
+    if not isinstance(grasp_document, dict):
+        raise ValueError(f"{source}: grasp must be a mapping")
+    policy = str(grasp_document.get("policy", "pose_error"))
+    if policy not in {"pose_error", "force_torque"}:
+        raise ValueError(f"{source}: invalid grasp.policy {policy!r}")
+    arms_document = grasp_document.get("arms", {})
+    if not isinstance(arms_document, dict):
+        raise ValueError(f"{source}: grasp.arms must be a mapping")
+    arm_policies = {}
+    for arm_name, arm_document in arms_document.items():
+        if not isinstance(arm_document, dict):
+            raise ValueError(f"{source}: grasp.arms.{arm_name} must be a mapping")
+        arm_policy = str(arm_document.get("policy", policy))
+        if arm_policy not in {"pose_error", "force_torque"}:
+            raise ValueError(
+                f"{source}: invalid grasp.arms.{arm_name}.policy {arm_policy!r}"
+            )
+        arm_policies[str(arm_name)] = arm_policy
+    offset = tuple(float(value) for value in grasp_document.get(
+        "contact_region_offset_m", (0.0, 0.0, -0.003)
+    ))
+    if len(offset) != 3:
+        raise ValueError(f"{source}: grasp.contact_region_offset_m must contain three values")
+    grasp = GraspConfig(
+        show_grasps=_boolean(
+            grasp_document.get("show_grasps", True), source=source,
+            field="grasp.show_grasps"
+        ),
+        max_grasps_per_object=int(grasp_document.get("max_grasps_per_object", 1)),
+        policy=policy,
+        arm_policies=arm_policies,
+        close_threshold_rad=float(grasp_document.get("close_threshold_rad", 0.04)),
+        release_threshold_rad=float(grasp_document.get("release_threshold_rad", 0.08)),
+        break_distance_m=float(grasp_document.get("break_distance_m", 0.005)),
+        break_orientation_rad=float(
+            grasp_document.get("break_orientation_rad", 0.2617993877991494)
+        ),
+        break_tension_force_n=float(grasp_document.get("break_tension_force_n", 10.0)),
+        break_shear_force_n=float(grasp_document.get("break_shear_force_n", 10.0)),
+        break_torque_nm=float(grasp_document.get("break_torque_nm", 0.25)),
+        break_load_duration_s=float(grasp_document.get("break_load_duration_s", 0.05)),
+        max_force_n=float(grasp_document.get("max_force_n", 100.0)),
+        constraint_erp=float(grasp_document.get("constraint_erp", 0.8)),
+        contact_region_offset_m=offset,
+        contact_region_radius_m=float(grasp_document.get("contact_region_radius_m", 0.008)),
+    )
+    if (
+        grasp.close_threshold_rad < 0.0
+        or grasp.max_grasps_per_object < 0
+        or grasp.release_threshold_rad <= grasp.close_threshold_rad
+        or grasp.break_distance_m <= 0.0
+        or not 0.0 < grasp.break_orientation_rad <= math.pi
+        or grasp.break_tension_force_n <= 0.0
+        or grasp.break_shear_force_n <= 0.0
+        or grasp.break_torque_nm <= 0.0
+        or grasp.break_load_duration_s < 0.0
+        or grasp.max_force_n <= 0.0
+        or not 0.0 < grasp.constraint_erp <= 1.0
+        or grasp.contact_region_radius_m <= 0.0
+    ):
+        raise ValueError(f"{source}: invalid grasp tuning values")
     generated = document.get("generated_root")
     generated_root = None
     if generated not in (None, ""):
@@ -61,6 +145,7 @@ def load_simulator_config(path: str | Path) -> SimulatorConfig:
         state_publish_rate_hz=state_rate,
         generated_root=generated_root,
         command_queue_capacity=capacity,
+        grasp=grasp,
         scene=None if scene in (None, "") else str(scene),
     )
 

@@ -40,6 +40,7 @@ class RenderScene:
         self._egl_plugin = -1
         self.arms = {}
         self.scene_objects = {}
+        self.grasp_markers = {}
         self.camera = None
         self.video_sink = None
 
@@ -66,11 +67,11 @@ class RenderScene:
             )
 
     def apply_state(self, state):
-        expected_length = len(self.robots) + 3
+        expected_length = len(self.robots) + 4
         if len(state) != expected_length:
             raise PyBulletBackendError("camera state does not match the render scene")
         joint_states = state[: len(self.robots)]
-        position, orientation, object_poses = state[-3:]
+        position, orientation, object_poses, marker_poses = state[-4:]
         for spec, positions in zip(self.robots, joint_states):
             body = self.arms[spec.name].robot.body_id
             if len(positions) != spec.joint_count:
@@ -92,7 +93,35 @@ class RenderScene:
                 object_orientation,
                 physicsClientId=self.connection,
             )
+        self._sync_grasp_markers(marker_poses)
         return Pose(position, orientation.reshape(3, 3))
+
+    def _sync_grasp_markers(self, marker_poses) -> None:
+        """Mirror control-world grasp markers into this render-only world."""
+        active = set(marker_poses)
+        for name in tuple(self.grasp_markers):
+            if name not in active:
+                self.pybullet.removeBody(
+                    self.grasp_markers.pop(name), physicsClientId=self.connection
+                )
+        for name, (position, orientation) in marker_poses.items():
+            if name not in self.grasp_markers:
+                shape = self.pybullet.createVisualShape(
+                    self.pybullet.GEOM_BOX,
+                    halfExtents=(0.002, 0.002, 0.002),
+                    rgbaColor=(1.0, 0.0, 0.0, 1.0),
+                    physicsClientId=self.connection,
+                )
+                self.grasp_markers[name] = self.pybullet.createMultiBody(
+                    baseMass=0.0,
+                    baseCollisionShapeIndex=-1,
+                    baseVisualShapeIndex=shape,
+                    physicsClientId=self.connection,
+                )
+            self.pybullet.resetBasePositionAndOrientation(
+                self.grasp_markers[name], position, orientation,
+                physicsClientId=self.connection,
+            )
 
     def render(self, state, timestamp):
         pose = self.apply_state(state)
