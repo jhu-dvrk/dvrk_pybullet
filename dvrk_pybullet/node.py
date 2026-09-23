@@ -48,6 +48,7 @@ class DvrkPyBulletNode(Node):
         generated_root: Path | None = None,
         command_queue_capacity: int = 32,
         renderer: str = "egl",
+        grasp_config=None,
     ) -> None:
         super().__init__("dvrk_pybullet")
         if scene_path is not None:
@@ -75,6 +76,7 @@ class DvrkPyBulletNode(Node):
         if self.simulation_rate_hz <= 0.0 or state_rate <= 0.0:
             raise ValueError("simulation and state publish rates must be positive")
         self.generated_root = generated_root
+        self.grasp_config = grasp_config
         capacity = int(command_queue_capacity)
         if capacity <= 0:
             raise ValueError("command queue capacity must be positive")
@@ -91,12 +93,15 @@ class DvrkPyBulletNode(Node):
                 self.arm_interfaces[config.name] = ArmRosInterface(
                     self, config, capacity, ecm_interface=ecm
                 )
-        self.create_timer(1.0 / state_rate, self._publish_latest)
+        self._publishing_enabled = True
+        self._state_publish_timer = self.create_timer(
+            1.0 / state_rate, self._publish_latest
+        )
         self._diagnostics = self.create_publisher(DiagnosticArray, "/diagnostics", 10)
         self._diagnostic_started_at = time.monotonic()
         self._diagnostic_snapshot_count = 0
         self._state_publish_rate_hz = state_rate
-        self.create_timer(1.0, self._publish_diagnostics)
+        self._diagnostics_timer = self.create_timer(1.0, self._publish_diagnostics)
         self._install_single_arm_compatibility(self.arm_interfaces[self.configs[0].name])
 
     def _install_single_arm_compatibility(self, interface: ArmRosInterface) -> None:
@@ -147,6 +152,16 @@ class DvrkPyBulletNode(Node):
         self._diagnostic_snapshot_count += 1
 
     def _publish_diagnostics(self) -> None:
+        if not self._publishing_enabled or not rclpy.ok():
+            return
+        try:
+            self._publish_diagnostics_impl()
+        except Exception:
+            if not rclpy.ok():
+                return
+            raise
+
+    def _publish_diagnostics_impl(self) -> None:
         now = time.monotonic()
         elapsed = max(now - self._diagnostic_started_at, 1e-6)
         simulation_hz = self._diagnostic_snapshot_count / elapsed
@@ -171,8 +186,23 @@ class DvrkPyBulletNode(Node):
         self._diagnostics.publish(message)
 
     def _publish_latest(self) -> None:
-        for interface in self.arm_interfaces.values():
-            interface.publish_latest()
+        if not self._publishing_enabled or not rclpy.ok():
+            return
+        try:
+            for interface in self.arm_interfaces.values():
+                interface.publish_latest()
+        except Exception:
+            # ros2 launch can shut down the global context before this timer's
+            # executor thread exits.  Publishing is no longer legal then.
+            if not rclpy.ok():
+                return
+            raise
+
+    def stop_publishing(self) -> None:
+        """Prevent periodic callbacks from publishing during ROS shutdown."""
+        self._publishing_enabled = False
+        self._state_publish_timer.cancel()
+        self._diagnostics_timer.cancel()
 
 
 def _spin_executor(executor: SingleThreadedExecutor) -> None:
@@ -190,6 +220,10 @@ def _parse_command_line(args: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--scene", type=Path, required=True, action="append", metavar="FILE",
         help="scene YAML path or installed scene filename; may be repeated internally",
+    )
+    parser.add_argument(
+        "--gui", choices=("true", "false"),
+        help="override the PyBullet GUI setting from the simulator YAML",
     )
     return parser.parse_args(remove_ros_args(args))
 
@@ -219,7 +253,8 @@ def main(args=None) -> int:
     try:
         node = DvrkPyBulletNode(
             scene_path=scene_path,
-            gui=False if "DVRK_SIMULATOR_TEST_TIMEOUT" in os.environ else config.gui,
+            gui=(False if "DVRK_SIMULATOR_TEST_TIMEOUT" in os.environ else
+                 config.gui if options.gui is None else options.gui == "true"),
             simulation_rate_hz=config.simulation_rate_hz,
             state_publish_rate_hz=config.state_publish_rate_hz,
             generated_root=(
@@ -227,6 +262,23 @@ def main(args=None) -> int:
             ),
             command_queue_capacity=config.command_queue_capacity,
             renderer=config.renderer,
+        )
+        grasp = config.grasp
+        node.get_logger().info(
+            "grasp tuning: "
+            f"markers={grasp.show_grasps}, "
+            f"max_grasps={grasp.max_grasps_per_object}, "
+            f"policy={grasp.policy}, arm_policies={grasp.arm_policies}, "
+            f"close={grasp.close_threshold_rad:.3f} rad, "
+            f"release={grasp.release_threshold_rad:.3f} rad, "
+            f"break={grasp.break_distance_m:.3f} m/{grasp.break_orientation_rad:.3f} rad, "
+            f"load={grasp.break_tension_force_n:.1f} N tension/"
+            f"{grasp.break_shear_force_n:.1f} N shear/"
+            f"{grasp.break_torque_nm:.2f} N m torque/"
+            f"{grasp.break_load_duration_s:.3f} s, "
+            f"force={grasp.max_force_n:.1f} N, erp={grasp.constraint_erp:.2f}, "
+            f"capture offset={grasp.contact_region_offset_m} m, "
+            f"radius={grasp.contact_region_radius_m:.3f} m"
         )
         runtime = PyBulletWorldRuntime(
             node.configs,
@@ -238,6 +290,7 @@ def main(args=None) -> int:
             {name: interface.commands for name, interface in node.arm_interfaces.items()},
             camera_options=node.camera_options,
             scene_objects=node.scene_objects,
+            grasp_config=config.grasp,
         )
         node.install_initial_snapshots(runtime.initialize())
         node.get_logger().info(
@@ -271,6 +324,8 @@ def main(args=None) -> int:
         print(f"error: {error}", file=sys.stderr)
         return 2
     finally:
+        if node is not None:
+            node.stop_publishing()
         if runtime is not None:
             runtime.shutdown()
         if executor is not None:

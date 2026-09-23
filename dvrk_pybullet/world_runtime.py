@@ -29,6 +29,7 @@ class PyBulletWorldRuntime:
         commands: Mapping[str, CommandMailboxes],
         camera_options=None,
         scene_objects: tuple[SceneObject, ...] = (),
+        grasp_config=None,
     ) -> None:
         if not configs:
             raise ValueError("a PyBullet world requires at least one robot")
@@ -36,6 +37,7 @@ class PyBulletWorldRuntime:
         self.pybullet = load_pybullet()
         self.connection = -1
         self.camera_options = camera_options
+        self.grasp_config = grasp_config
         self.scene_object_specs = scene_objects
         self.scene_objects = {}
         self.grasp_manager = None
@@ -73,7 +75,23 @@ class PyBulletWorldRuntime:
                 for name, arm in self.arms.items()
             }
             self.grasp_manager = GraspManager(
-                self.pybullet, self.connection, self.arms, self.scene_objects
+                self.pybullet, self.connection, self.arms, self.scene_objects,
+                show_markers=self.grasp_config.show_grasps if self.grasp_config else True,
+                max_grasps_per_object=(self.grasp_config.max_grasps_per_object if self.grasp_config else 1),
+                default_policy=self.grasp_config.policy if self.grasp_config else "pose_error",
+                arm_policies=self.grasp_config.arm_policies if self.grasp_config else {},
+                close_threshold=self.grasp_config.close_threshold_rad if self.grasp_config else 0.04,
+                release_threshold=self.grasp_config.release_threshold_rad if self.grasp_config else 0.08,
+                break_distance=self.grasp_config.break_distance_m if self.grasp_config else 0.005,
+                break_orientation=(self.grasp_config.break_orientation_rad if self.grasp_config else 0.2617993877991494),
+                break_tension_force=(self.grasp_config.break_tension_force_n if self.grasp_config else 10.0),
+                break_shear_force=(self.grasp_config.break_shear_force_n if self.grasp_config else 10.0),
+                break_torque=self.grasp_config.break_torque_nm if self.grasp_config else 0.25,
+                break_load_duration=(self.grasp_config.break_load_duration_s if self.grasp_config else 0.05),
+                max_force=self.grasp_config.max_force_n if self.grasp_config else 100.0,
+                constraint_erp=self.grasp_config.constraint_erp if self.grasp_config else 0.8,
+                contact_region_offset=(self.grasp_config.contact_region_offset_m if self.grasp_config else (0.0, 0.0, -0.003)),
+                contact_region_radius=(self.grasp_config.contact_region_radius_m if self.grasp_config else 0.008),
             )
             self._start_camera_worker(snapshots)
             if self.options.gui:
@@ -120,11 +138,15 @@ class PyBulletWorldRuntime:
             )
             for item in self.scene_objects.values()
         )
+        marker_poses = (
+            {} if self.grasp_manager is None else self.grasp_manager.marker_poses()
+        )
         return (
             *joint_positions,
             camera_pose.position,
             camera_pose.orientation.reshape(9),
             object_poses,
+            marker_poses,
         )
 
     def step(self) -> dict[str, ArmSnapshot]:

@@ -2,9 +2,33 @@ from pathlib import Path
 
 from dvrk_pybullet.configuration import (
     load_installed_scene_config,
+    load_simulator_config,
     resolve_scene_path,
     scene_search_paths,
 )
+
+
+def test_grasp_markers_default_to_enabled_and_can_be_disabled(tmp_path):
+    default_path = tmp_path / "default.yaml"
+    default_path.write_text("{}\n", encoding="utf-8")
+    defaults = load_simulator_config(default_path).grasp
+    assert defaults.show_grasps is True
+    assert defaults.max_grasps_per_object == 1
+    assert defaults.break_distance_m == 0.005
+    assert defaults.break_orientation_rad == 0.2617993877991494
+
+    disabled_path = tmp_path / "disabled.yaml"
+    disabled_path.write_text("grasp:\n  show_grasps: false\n", encoding="utf-8")
+    assert load_simulator_config(disabled_path).grasp.show_grasps is False
+
+    policies_path = tmp_path / "policies.yaml"
+    policies_path.write_text(
+        "grasp:\n  policy: force_torque\n  arms:\n    PSM1:\n      policy: pose_error\n",
+        encoding="utf-8",
+    )
+    policies = load_simulator_config(policies_path).grasp
+    assert policies.policy == "force_torque"
+    assert policies.arm_policies == {"PSM1": "pose_error"}
 
 
 def test_scene_search_paths_includes_exercises():
