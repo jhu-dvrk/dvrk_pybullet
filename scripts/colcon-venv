@@ -1,3 +1,0 @@
-#!/bin/sh
-# Keep colcon's Python package build task on the active workspace venv.
-exec "$(dirname "$0")/python" -m colcon "$@"

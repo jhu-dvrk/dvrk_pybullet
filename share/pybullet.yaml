@@ -1,8 +1,8 @@
-# Backend-level settings. Camera geometry and transport live in the scene YAML.
-renderer: egl
-gui: true
-simulation_rate_hz: 120.0
-state_publish_rate_hz: 100.0
 command_queue_capacity: 32
 generated_root: null
+gui: true
+pybullet_python: /home/anton/wss/dvrk/venv/bin/python
+renderer: egl
 scene: null
+simulation_rate_hz: 120.0
+state_publish_rate_hz: 100.0

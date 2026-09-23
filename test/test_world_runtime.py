@@ -2,7 +2,7 @@ from pathlib import Path
 import pytest
 
 from dvrk_simulator_base.command_mailbox import CommandMailboxes
-from dvrk_simulator_base.config import load_robot_config
+from dvrk_arm_description import load_robot_config
 
 from dvrk_pybullet.runtime import RuntimeOptions
 from dvrk_pybullet.world_runtime import PyBulletWorldRuntime
@@ -10,9 +10,7 @@ from dvrk_pybullet.world_runtime import PyBulletWorldRuntime
 
 def test_world_owns_one_connection_and_multiple_kinematic_arms(tmp_path):
     pytest.importorskip("pybullet")
-    arm_root = Path(__file__).parents[2] / "dvrk-cp-base" / "share" / "arms"
-    if not arm_root.is_dir():
-        arm_root = Path("/tmp/dvrk-cp-base/share/arms")
+    arm_root = Path(__file__).parents[2] / "dvrk_arm_description" / "arms"
     configs = (
         load_robot_config(
             arm_root / "PSM1.yaml", instrument="420006", base_position=[-0.1, 0, 0.17]

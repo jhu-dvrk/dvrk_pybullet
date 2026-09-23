@@ -8,11 +8,11 @@ import time
 
 import numpy as np
 
-from dvrk_simulator_base.config import RobotConfig
+from dvrk_arm_description import RobotConfig
 from dvrk_simulator_base.command_mailbox import CommandMailboxes
 from dvrk_simulator_base.operating_state import CRTKOperatingState
-from dvrk_simulator_base.rotations import quaternion_matrix_xyzw
 from dvrk_simulator_base.snapshots import ArmSnapshot, OperatingStateSnapshot
+from dvrk_simulator_base.rotations import quaternion_matrix_xyzw
 from dvrk_simulator_base.types import IKResult, JointState, Pose, Twist
 from dvrk_simulator_base.trajectory import JointTrajectory
 
@@ -65,23 +65,16 @@ class PyBulletRuntime:
         self._move_failure_pending = False
         self._operating_state_event_pending = False
         self._operating_state = CRTKOperatingState(CRTKOperatingState.ENABLED)
-        control = config.raw.get("robot", {}).get("control", {})
-        self._command_timeout_ns = int(
-            float(control.get("command_timeout_s", 0.25)) * 1_000_000_000
-        )
         jaw = config.raw.get("robot", {}).get("jaw", {})
         self._jaw_lower = float(jaw.get("lower", -0.349066))
         self._jaw_upper = float(jaw.get("upper", 1.39626))
         self._jaw_speed = float(jaw.get("velocity", 0.4))
-        if self._command_timeout_ns < 0:
-            raise ValueError("command_timeout_s cannot be negative")
         if not self._jaw_lower <= self._jaw_upper:
             raise ValueError("jaw lower limit cannot exceed upper limit")
         if not np.isfinite(self._jaw_speed) or self._jaw_speed <= 0.0:
             raise ValueError("jaw velocity must be finite and positive")
         self.commands_applied = 0
         self.commands_rejected = 0
-        self.commands_timed_out = 0
         self.commands_canceled = 0
         self._sequence = 0
         self._simulation_time = 0.0
@@ -180,13 +173,6 @@ class PyBulletRuntime:
         joint_move_started = False
         jaw_move_started = False
         for command in self.commands.drain():
-            if now_ns - command.received_at_ns > self._command_timeout_ns:
-                self.commands_timed_out += 1
-                self.commands_rejected += 1
-                if self._is_move_command(command.channel):
-                    self._move_failure_pending = True
-                continue
-
             if command.channel == "state_command":
                 success, _ = self._operating_state.command(command.payload)
                 if not success:
@@ -323,20 +309,25 @@ class PyBulletRuntime:
             self._tool_link_index,
             computeForwardKinematics=True,
         )
-        return Pose(
-            np.asarray(link_state[4], dtype=float),
-            quaternion_matrix_xyzw(np.asarray(link_state[5], dtype=float)),
-        )
+        return Pose(np.asarray(link_state[4], dtype=float), quaternion_matrix_xyzw(link_state[5]))
 
     @staticmethod
     def _pose_error(
         current: Pose, target: Pose, use_orientation: bool = True
     ) -> tuple[np.ndarray, float, float]:
-        position_error = target.position - current.position
+        position_error = np.array(
+            target.position - current.position, dtype=float
+        )
+        c_rot = np.array(
+            current.orientation, dtype=float
+        )
+        t_rot = np.array(
+            target.orientation, dtype=float
+        )
         orientation_error = 0.5 * (
-            np.cross(current.orientation[:, 0], target.orientation[:, 0])
-            + np.cross(current.orientation[:, 1], target.orientation[:, 1])
-            + np.cross(current.orientation[:, 2], target.orientation[:, 2])
+            np.cross(c_rot[:, 0], t_rot[:, 0])
+            + np.cross(c_rot[:, 1], t_rot[:, 1])
+            + np.cross(c_rot[:, 2], t_rot[:, 2])
         )
         return (
             np.concatenate((position_error, orientation_error))
@@ -485,14 +476,8 @@ class PyBulletRuntime:
             computeLinkVelocity=True,
             computeForwardKinematics=True,
         )
-        pose = Pose(
-            np.asarray(link_state[4], dtype=float),
-            quaternion_matrix_xyzw(np.asarray(link_state[5], dtype=float)),
-        )
-        twist = Twist(
-            np.asarray(link_state[6], dtype=float),
-            np.asarray(link_state[7], dtype=float),
-        )
+        pose = Pose(np.asarray(link_state[4], dtype=float), quaternion_matrix_xyzw(link_state[5]))
+        twist = Twist(np.asarray(link_state[6], dtype=float), np.asarray(link_state[7], dtype=float))
         jaw = (
             float(self.pybullet.getJointState(self.robot.body_id, self._jaw_joint_index)[0])
             if self._jaw_joint_index is not None else None

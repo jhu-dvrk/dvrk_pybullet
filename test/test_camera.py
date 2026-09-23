@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import numpy as np
+import PyKDL
 
 from dvrk_simulator_base.scene import SceneCamera
 from dvrk_simulator_base.types import Pose
@@ -32,7 +33,7 @@ def test_scene_camera_uses_shared_isaac_field_names():
 
 
 def test_optical_axes_map_to_pybullet_view_vectors():
-    pose = Pose(np.array([1.0, 2.0, 3.0]), np.eye(3))
+    pose = PyKDL.Frame(PyKDL.Rotation(), PyKDL.Vector(1.0, 2.0, 3.0))
     eye, target, up = view_vectors(pose)
     np.testing.assert_allclose(eye, [1.0, 2.0, 3.0])
     np.testing.assert_allclose(target, [2.0, 2.0, 3.0])
@@ -67,7 +68,7 @@ def test_camera_returns_contiguous_rgba():
     backend = _FakePyBullet()
     options = CameraOptions(width=4, height=3)
     camera = PyBulletCamera(backend, 7, options, renderer=99)
-    frame = camera.capture(Pose(np.zeros(3), np.eye(3)), 1.25)
+    frame = camera.capture(PyKDL.Frame(), 1.25)
     assert frame.rgba.shape == (3, 4, 4)
     assert frame.rgba.flags.c_contiguous
     assert frame.simulation_time == 1.25
@@ -80,7 +81,7 @@ def test_stereo_camera_renders_left_then_right_side_by_side():
     backend = _FakePyBullet()
     options = CameraOptions(mode="stereo", width=4, height=3, baseline_m=0.006)
     camera = PyBulletCamera(backend, 7, options, renderer=99)
-    frame = camera.capture(Pose(np.zeros(3), np.eye(3)), 1.25)
+    frame = camera.capture(PyKDL.Frame(), 1.25)
     assert frame.rgba.shape == (3, 8, 4)
     assert frame.rgba.flags.c_contiguous
     assert options.transport_width == 8

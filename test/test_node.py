@@ -7,7 +7,7 @@ from crtk_msgs.msg import StringStamped
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import JointState
 
-from dvrk_simulator_base.config import JointConfig, RobotConfig
+from dvrk_arm_description import JointConfig, RobotConfig
 from dvrk_simulator_base.scene import SceneCamera
 
 import dvrk_pybullet.node as node_module
@@ -231,7 +231,9 @@ def test_callbacks_validate_and_enqueue_without_touching_backend(monkeypatch, tm
             commands[0].payload, [0.1, 0.2, 0.12, 0.3, 0.4, 0.5]
         )
         assert commands[1].payload == 0.25
-        np.testing.assert_allclose(commands[2].payload.position, [0.01, 0.02, 0.03])
+        np.testing.assert_allclose(
+            [commands[2].payload.p[i] for i in range(3)], [0.01, 0.02, 0.03]
+        )
         assert commands[3].payload == "pause"
     finally:
         if node is not None:

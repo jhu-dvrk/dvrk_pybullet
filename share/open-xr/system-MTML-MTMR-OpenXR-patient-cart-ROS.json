@@ -112,7 +112,6 @@
             "interface": "Console/clutch/MTMR_PSM1"
           },
           "configure_parameter": {
-            "MTM_is_haptic": false,
             "align_MTM": false,
             "use_MTM_linear_velocity": false,
             "use_MTM_angular_velocity": false,
@@ -133,7 +132,6 @@
             "interface": "Console/clutch/MTML_PSM2"
           },
           "configure_parameter": {
-            "MTM_is_haptic": false,
             "align_MTM": false,
             "use_MTM_linear_velocity": false,
             "use_MTM_angular_velocity": false,
@@ -154,7 +152,6 @@
             "interface": "Console/clutch/MTML_PSM2"
           },
           "configure_parameter": {
-            "MTM_is_haptic": false,
             "align_MTM": false,
             "use_MTM_linear_velocity": false,
             "use_MTM_angular_velocity": false,

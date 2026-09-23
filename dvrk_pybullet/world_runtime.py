@@ -8,7 +8,7 @@ from typing import Mapping
 import numpy as np
 
 from dvrk_simulator_base.command_mailbox import CommandMailboxes
-from dvrk_simulator_base.config import RobotConfig
+from dvrk_arm_description import RobotConfig
 from dvrk_simulator_base.snapshots import ArmSnapshot
 from dvrk_simulator_base.scene import SceneObject
 
@@ -122,8 +122,8 @@ class PyBulletWorldRuntime:
         )
         return (
             *joint_positions,
-            np.asarray(camera_pose.position, dtype=float),
-            np.asarray(camera_pose.orientation, dtype=float).reshape(9),
+            camera_pose.position,
+            camera_pose.orientation.reshape(9),
             object_poses,
         )
 

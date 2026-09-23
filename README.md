@@ -4,21 +4,15 @@ PyBullet implementation of the backend contracts defined by
 `dvrk_simulator_base`. The package will load robot assets from `dvrk_model` and
 must not depend on SurRoL.
 
-PyBullet is intentionally loaded only when the backend starts. Install it in a
-system-site-packages virtual environment:
+PyBullet is required by the backend runtime. During build time (`colcon build`),
+CMake automatically validates and selects a Python interpreter that can `import pybullet`:
 
-```shell
-./src/dvrk/dvrk_pybullet/scripts/bootstrap_venv.sh
-source .venv/bin/activate
-hash -r
-command -v colcon
-```
-
-The bootstrap creates or reuses `<workspace>/.venv`, installs PyBullet, and
-places a `colcon` wrapper inside the venv. Consequently, bare `colcon build`
-uses the venv interpreter and generated ROS executables retain access to
-PyBullet. It is safe to run repeatedly. Use `--python PATH` to select a
-different bootstrap interpreter.
+1. If the default Python interpreter can import `pybullet`, it is selected automatically.
+2. If `pybullet` is installed in a virtual environment (e.g. `~/wss/dvrk/venv`), set the environment variable:
+   ```shell
+   export DVRK_PYBULLET_PYTHON=~/wss/dvrk/venv/bin/python
+   ```
+3. CMake saves the selected interpreter in its cache and generates the executable entry-point scripts with the appropriate shebang (`#!<DVRK_PYBULLET_PYTHON>`). Subsequent builds remember this selection.
 
 The simulator currently supports shared-world kinematic PSM and ECM models,
 CRTK ROS interfaces, and an ECM optical camera exported through GStreamer's

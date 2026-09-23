@@ -132,7 +132,7 @@ class VideoFrame:
 
 def view_vectors(optical_pose: Pose) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Return PyBullet eye, target, and up vectors for ECM optical +X/+Z axes."""
-    eye = np.asarray(optical_pose.position, dtype=float)
+    eye = optical_pose.position
     target = eye + optical_pose.orientation[:, 0]
     up = optical_pose.orientation[:, 2]
     return eye, target, up
@@ -187,12 +187,8 @@ class PyBulletCamera:
         else:
             half_baseline = 0.5 * self.options.baseline_m
             left_offset = optical_pose.orientation[:, 1] * half_baseline
-            left_pose = Pose(
-                optical_pose.position + left_offset, optical_pose.orientation
-            )
-            right_pose = Pose(
-                optical_pose.position - left_offset, optical_pose.orientation
-            )
+            left_pose = Pose(optical_pose.position + left_offset, optical_pose.orientation)
+            right_pose = Pose(optical_pose.position - left_offset, optical_pose.orientation)
             rgba = np.ascontiguousarray(
                 np.concatenate(
                     (self._capture_eye(left_pose), self._capture_eye(right_pose)),

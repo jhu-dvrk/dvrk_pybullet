@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
+import numpy as np
 
 from dvrk_simulator_base.types import Pose
 
@@ -92,7 +93,7 @@ class RenderScene:
                 object_orientation,
                 physicsClientId=self.connection,
             )
-        return Pose(position, orientation.reshape(3, 3))
+        return Pose(np.asarray(position, dtype=float), np.asarray(orientation, dtype=float).reshape(3, 3))
 
     def render(self, state, timestamp):
         pose = self.apply_state(state)

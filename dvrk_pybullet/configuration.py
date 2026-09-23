@@ -10,7 +10,7 @@ import yaml
 
 from ament_index_python.packages import get_package_share_directory
 
-from dvrk_simulator_base.config import RobotConfig, load_robot_config
+from dvrk_arm_description import RobotConfig, load_robot_config
 from dvrk_simulator_base.scene import SceneConfig, SceneResolver, load_scene_config
 
 
@@ -23,6 +23,7 @@ class SimulatorConfig:
     generated_root: Path | None = None
     command_queue_capacity: int = 32
     scene: str | None = None
+    pybullet_python: Path | None = None
 
 
 def _boolean(value, *, source: Path, field: str) -> bool:
@@ -54,6 +55,11 @@ def load_simulator_config(path: str | Path) -> SimulatorConfig:
         if not generated_root.is_absolute():
             generated_root = (source.parent / generated_root).resolve()
     scene = document.get("scene")
+    pybullet_python = document.get("pybullet_python")
+    if pybullet_python not in (None, ""):
+        pybullet_python = Path(str(pybullet_python)).expanduser().absolute()
+    else:
+        pybullet_python = None
     return SimulatorConfig(
         renderer=renderer,
         gui=_boolean(document.get("gui", True), source=source, field="gui"),
@@ -62,12 +68,13 @@ def load_simulator_config(path: str | Path) -> SimulatorConfig:
         generated_root=generated_root,
         command_queue_capacity=capacity,
         scene=None if scene in (None, "") else str(scene),
+        pybullet_python=pybullet_python,
     )
 
 
 def load_installed_robot_config(model: str, instrument: str) -> RobotConfig:
-    share = Path(get_package_share_directory("dvrk_simulator_base"))
-    path = share / "share" / "arms" / f"{model}.yaml"
+    share = Path(get_package_share_directory("dvrk_arm_description"))
+    path = share / "arms" / f"{model}.yaml"
     if not path.is_file():
         raise RuntimeError(f"installed robot configuration does not exist: {path}")
     if str(model).upper() == "ECM":
@@ -111,6 +118,7 @@ def load_installed_scene_config(
     search_paths: Sequence[Path] | None = None,
 ) -> SceneConfig:
     share = Path(get_package_share_directory("dvrk_simulator_base"))
+    arm_description_share = Path(get_package_share_directory("dvrk_arm_description"))
     pybullet_share = Path(get_package_share_directory("dvrk_pybullet"))
     default_search = (
         pybullet_share / "share" / "scenes",
@@ -119,6 +127,6 @@ def load_installed_scene_config(
     resolver = SceneResolver(tuple(search_paths or default_search))
     return load_scene_config(
         path,
-        robot_config_root=share / "share" / "arms",
+        robot_config_root=arm_description_share / "arms",
         resolver=resolver,
     )

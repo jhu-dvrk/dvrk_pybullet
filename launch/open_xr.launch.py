@@ -17,20 +17,31 @@ def generate_launch_description():
     package_share = Path(get_package_share_directory("dvrk_pybullet"))
     open_xr_directory = package_share / "share" / "open-xr"
     simulator_config = open_xr_directory / "pybullet.yaml"
+    main_config = package_share / "share" / "pybullet.yaml"
     scene = package_share / "share" / "scenes" / "ECM_PSM1_PSM2_PSM3.yaml"
     system_config = (
         open_xr_directory / "system-MTML-MTMR-OpenXR-patient-cart-ROS.json"
     )
     overlay_config = open_xr_directory / "dvrk-console-overlay.json"
-    simulator = Node(
-        package="dvrk_pybullet",
-        executable="simulator_node",
-        output="screen",
-        arguments=[
+
+    from dvrk_pybullet.configuration import load_simulator_config
+    cfg = load_simulator_config(simulator_config)
+    pybullet_python = cfg.pybullet_python or load_simulator_config(main_config).pybullet_python
+    if pybullet_python is None or not Path(pybullet_python).is_file():
+        raise RuntimeError(
+            f"PyBullet Python interpreter is not configured or not found: {pybullet_python}. "
+            "Rebuild the workspace with DVRK_PYBULLET_PYTHON set to the Python interpreter with pybullet installed."
+        )
+
+    simulator = ExecuteProcess(
+        cmd=[
+            str(pybullet_python),
+            str(package_share / "scripts" / "simulator.py"),
             "--config", str(simulator_config),
             "--scene", str(scene),
             "--scene", LaunchConfiguration("scene"),
         ],
+        output="screen",
     )
     dvrk_system = Node(
         package="dvrk_robot",

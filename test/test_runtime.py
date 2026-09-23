@@ -1,7 +1,8 @@
 import numpy as np
+import PyKDL
 import pytest
 
-from dvrk_simulator_base.config import JointConfig, RobotConfig
+from dvrk_arm_description import JointConfig, RobotConfig
 from dvrk_simulator_base.types import Pose
 
 import dvrk_pybullet.runtime as runtime_module
@@ -46,7 +47,7 @@ def test_runtime_produces_coherent_pybullet_snapshot(tmp_path):
         np.testing.assert_allclose(
             initial.measured_js.position, [0.0, 0.0, 0.12, 0.0, 0.0, 0.0]
         )
-        assert initial.measured_cp_world.position.shape == (3,)
+        assert isinstance(initial.measured_cp_world, PyKDL.Frame)
         assert initial.jaw_measured == pytest.approx(0.0)
         stepped = runtime.step()
         assert stepped.sequence == initial.sequence + 1
@@ -70,20 +71,21 @@ def test_runtime_produces_coherent_pybullet_snapshot(tmp_path):
             )[0]
             assert measured == pytest.approx(0.7 * mimic.multiplier + mimic.offset)
 
-        cartesian_target = Pose(
-            commanded.measured_cp_world.position + np.array([0.005, 0.0, 0.0]),
-            commanded.measured_cp_world.orientation,
+        offset = PyKDL.Vector(0.005, 0.0, 0.0)
+        cartesian_target = PyKDL.Frame(
+            commanded.measured_cp_world.M,
+            commanded.measured_cp_world.p + offset,
         )
         runtime.commands.submit_servo("servo_cp", cartesian_target)
         cartesian = runtime.step()
         np.testing.assert_allclose(
-            cartesian.measured_cp_world.position,
-            cartesian_target.position,
+            [cartesian.measured_cp_world.p[i] for i in range(3)],
+            [cartesian_target.p[i] for i in range(3)],
             atol=2e-4,
         )
         np.testing.assert_allclose(
-            cartesian.measured_cp_world.orientation,
-            cartesian_target.orientation,
+            [[cartesian.measured_cp_world.M[i, j] for j in range(3)] for i in range(3)],
+            [[cartesian_target.M[i, j] for j in range(3)] for i in range(3)],
             atol=2e-3,
         )
     finally:
