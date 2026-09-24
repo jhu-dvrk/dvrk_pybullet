@@ -9,6 +9,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, EmitEvent, ExecuteProcess, LogInfo, RegisterEventHandler
 from launch.event_handlers import OnProcessExit
 from launch.events import Shutdown
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -25,8 +26,16 @@ def generate_launch_description():
 
     from dvrk_pybullet.configuration import load_simulator_config
     from dvrk_pybullet.python_runtime import resolve_pybullet_python
-    selection = resolve_pybullet_python(
-        load_simulator_config(simulator_config).generated_root
+    from dvrk_pybullet.urdf_materializer import default_generated_root
+    from dvrk_simulator_base.rqt_perspective import (
+        existing_ament_prefix_path,
+        write_monitor_perspective,
+    )
+    pybullet_config = load_simulator_config(simulator_config)
+    selection = resolve_pybullet_python(pybullet_config.generated_root)
+    rqt_perspective = write_monitor_perspective(
+        (pybullet_config.generated_root or default_generated_root()) / "rqt" / "open-xr.perspective",
+        ("ECM", "PSM1", "PSM2", "PSM3"), include_console=True,
     )
 
     simulator = ExecuteProcess(
@@ -60,6 +69,17 @@ def generate_launch_description():
         executable="start_dvrk_system",
         output="screen",
         arguments=["--console", LaunchConfiguration("console")],
+    )
+    rqt_environment = {
+        "DVRK_RQT_ARMS": "ECM,PSM1,PSM2,PSM3",
+        "DVRK_RQT_CONSOLE": LaunchConfiguration("console"),
+    }
+    if prefix_path := existing_ament_prefix_path():
+        rqt_environment["AMENT_PREFIX_PATH"] = prefix_path
+    rqt_monitor = ExecuteProcess(
+        cmd=["rqt", "--perspective-file", str(rqt_perspective)],
+        additional_env=rqt_environment,
+        condition=IfCondition(LaunchConfiguration("rqt")), output="screen",
     )
 
     stop_with_simulator = RegisterEventHandler(
@@ -97,6 +117,10 @@ def generate_launch_description():
                 default_value="false",
                 description="show the local PyBullet debug GUI",
             ),
+            DeclareLaunchArgument(
+                "rqt", default_value="false",
+                description="start a dockable dVRK and CRTK rqt monitor",
+            ),
             LogInfo(
                 msg=(
                     f"Starting PyBullet simulator with Python {selection.path} "
@@ -107,6 +131,7 @@ def generate_launch_description():
             console_overlay,
             dvrk_system,
             start_system,
+            rqt_monitor,
             stop_with_simulator,
             stop_with_console,
             stop_with_overlay,

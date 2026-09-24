@@ -45,3 +45,6 @@ ros2 launch dvrk_pybullet open_xr.launch.py \
   gui:=true
 ```
 
+Add `rqt:=true` to start the dVRK Console widget, CRTK Arm panels, and the
+diagnostics panel.  This is independent of `gui:=true`, which only opens the
+local PyBullet debug window.

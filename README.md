@@ -66,7 +66,9 @@ ros2 launch dvrk_pybullet simulator.launch.py \
   scene:=ECM_PSM1_PSM2.yaml
 ```
 
-The only optional launch argument is `config:=/path/to/pybullet.yaml`. Runtime
+Optional launch arguments are `config:=/path/to/pybullet.yaml` and `rqt:=true`.
+The latter starts one tabbed CRTK Arms panel for the robots in the selected
+scene plus the diagnostics panel. Runtime
 settings, including GUI, rates, queue capacity, renderer, and generated asset
 location, belong in that backend configuration. Robots, instruments, camera,
 and transport settings belong in the scene YAML.
