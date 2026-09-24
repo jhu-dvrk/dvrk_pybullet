@@ -1,6 +1,4 @@
-# Local simulator settings. Run colcon build to create pybullet.yaml with the
-# Python installation path for this machine.
-pybullet_python: null
+# Portable PyBullet backend settings.
 renderer: egl
 gui: true
 simulation_rate_hz: 120.0

@@ -109,9 +109,10 @@
           "PSM": "PSM1",
           "clutch": {
             "component": "OpenXR",
-            "interface": "Console/clutch/MTMR_PSM1"
+            "interface": "Console/clutch/MTMR"
           },
           "configure_parameter": {
+            "MTM_is_haptic": false,
             "align_MTM": false,
             "use_MTM_linear_velocity": false,
             "use_MTM_angular_velocity": false,
@@ -129,9 +130,10 @@
           "PSM": "PSM2",
           "clutch": {
             "component": "OpenXR",
-            "interface": "Console/clutch/MTML_PSM2"
+            "interface": "Console/clutch/MTML"
           },
           "configure_parameter": {
+            "MTM_is_haptic": false,
             "align_MTM": false,
             "use_MTM_linear_velocity": false,
             "use_MTM_angular_velocity": false,
@@ -149,9 +151,10 @@
           "PSM": "PSM3",
           "clutch": {
             "component": "OpenXR",
-            "interface": "Console/clutch/MTML_PSM2"
+            "interface": "Console/clutch/MTML"
           },
           "configure_parameter": {
+            "MTM_is_haptic": false,
             "align_MTM": false,
             "use_MTM_linear_velocity": false,
             "use_MTM_angular_velocity": false,

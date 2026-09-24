@@ -25,7 +25,6 @@ class SimulatorConfig:
     command_queue_capacity: int = 32
     grasp: "GraspConfig" = None
     scene: str | None = None
-    pybullet_python: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -139,11 +138,6 @@ def load_simulator_config(path: str | Path) -> SimulatorConfig:
         if not generated_root.is_absolute():
             generated_root = (source.parent / generated_root).resolve()
     scene = document.get("scene")
-    pybullet_python = document.get("pybullet_python")
-    if pybullet_python not in (None, ""):
-        pybullet_python = Path(str(pybullet_python)).expanduser().absolute()
-    else:
-        pybullet_python = None
     return SimulatorConfig(
         renderer=renderer,
         gui=_boolean(document.get("gui", True), source=source, field="gui"),
@@ -153,7 +147,6 @@ def load_simulator_config(path: str | Path) -> SimulatorConfig:
         command_queue_capacity=capacity,
         grasp=grasp,
         scene=None if scene in (None, "") else str(scene),
-        pybullet_python=pybullet_python,
     )
 
 

@@ -18,7 +18,6 @@ grasp:
   contact_region_radius_m: 0.008  # 8 mm
 generated_root: null
 gui: true
-pybullet_python: /home/anton/wss/dvrk/venv/bin/python
 renderer: egl
 scene: null
 simulation_rate_hz: 120.0

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, EmitEvent, RegisterEventHandler
+from launch.actions import DeclareLaunchArgument, EmitEvent, ExecuteProcess, LogInfo, RegisterEventHandler
 from launch.event_handlers import OnProcessExit
 from launch.events import Shutdown
 from launch.substitutions import LaunchConfiguration
@@ -17,7 +17,6 @@ def generate_launch_description():
     package_share = Path(get_package_share_directory("dvrk_pybullet"))
     open_xr_directory = package_share / "share" / "open-xr"
     simulator_config = open_xr_directory / "pybullet.yaml"
-    main_config = package_share / "share" / "pybullet.yaml"
     scene = package_share / "share" / "scenes" / "ECM_PSM1_PSM2_PSM3.yaml"
     system_config = (
         open_xr_directory / "system-MTML-MTMR-OpenXR-patient-cart-ROS.json"
@@ -25,17 +24,14 @@ def generate_launch_description():
     overlay_config = open_xr_directory / "dvrk-console-overlay.json"
 
     from dvrk_pybullet.configuration import load_simulator_config
-    cfg = load_simulator_config(simulator_config)
-    pybullet_python = cfg.pybullet_python or load_simulator_config(main_config).pybullet_python
-    if pybullet_python is None or not Path(pybullet_python).is_file():
-        raise RuntimeError(
-            f"PyBullet Python interpreter is not configured or not found: {pybullet_python}. "
-            "Rebuild the workspace with DVRK_PYBULLET_PYTHON set to the Python interpreter with pybullet installed."
-        )
+    from dvrk_pybullet.python_runtime import resolve_pybullet_python
+    selection = resolve_pybullet_python(
+        load_simulator_config(simulator_config).generated_root
+    )
 
     simulator = ExecuteProcess(
         cmd=[
-            str(pybullet_python),
+            str(selection.path),
             str(package_share / "scripts" / "simulator.py"),
             "--config", str(simulator_config),
             "--scene", str(scene),
@@ -100,6 +96,12 @@ def generate_launch_description():
                 "gui",
                 default_value="false",
                 description="show the local PyBullet debug GUI",
+            ),
+            LogInfo(
+                msg=(
+                    f"Starting PyBullet simulator with Python {selection.path} "
+                    f"(selected via {selection.source})"
+                )
             ),
             simulator,
             console_overlay,

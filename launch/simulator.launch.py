@@ -7,6 +7,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, LogInfo, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from dvrk_pybullet.configuration import load_simulator_config
+from dvrk_pybullet.python_runtime import resolve_pybullet_python
 
 
 def _start_sim(context):
@@ -14,24 +15,24 @@ def _start_sim(context):
     config_path = Path(LaunchConfiguration("config").perform(context)).expanduser().resolve()
     simulator_config = load_simulator_config(config_path)
 
-    pybullet_python = simulator_config.pybullet_python
-    if pybullet_python is None or not Path(pybullet_python).is_file():
-        raise RuntimeError(
-            f"PyBullet Python interpreter is not configured or not found: {pybullet_python}. "
-            "Rebuild the workspace with DVRK_PYBULLET_PYTHON set to the Python interpreter with pybullet installed."
-        )
+    selection = resolve_pybullet_python(simulator_config.generated_root)
 
     scene = LaunchConfiguration("scene").perform(context) or simulator_config.scene
     script = package_share / "scripts" / "simulator.py"
 
     cmd = [
-        str(pybullet_python),
+        str(selection.path),
         str(script),
         "--config", str(config_path),
         "--scene", str(scene),
     ]
     return [
-        LogInfo(msg=f"Starting PyBullet simulator with Python {pybullet_python}"),
+        LogInfo(
+            msg=(
+                f"Starting PyBullet simulator with Python {selection.path} "
+                f"(selected via {selection.source})"
+            )
+        ),
         ExecuteProcess(cmd=cmd, output="screen"),
     ]
 
