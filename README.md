@@ -4,8 +4,20 @@ PyBullet implementation of the backend contracts defined by
 `dvrk_simulator_base`. The package will load robot assets from `dvrk_model` and
 must not depend on SurRoL.
 
-PyBullet is required only when the backend runs, not when it builds.  Launch
-files use the current Python interpreter when it can import `pybullet`.  If
+PyBullet is required only when the backend runs, not when it builds. Dependencies are listed in `requirements.txt`. You can configure the Python environment in either of two ways:
+
+1. **Use the bootstrap script** to create a workspace virtual environment (`.venv`) with `--system-site-packages` and install dependencies using pip:
+   ```shell
+   ./src/dvrk/dvrk_pybullet/scripts/bootstrap_venv.sh
+   ```
+   The script prompts for confirmation before creating the environment and installing packages from `requirements.txt`. (Pass `-y` or `--yes` to proceed non-interactively).
+
+2. **Use your own Python environment** and install dependencies using pip:
+   ```shell
+   pip install -r src/dvrk/dvrk_pybullet/requirements.txt
+   ```
+
+Launch files use the current Python interpreter when it can import `pybullet`. If
 PyBullet is installed in a different virtual environment, select it for the
 current shell without changing project files:
 
@@ -14,10 +26,10 @@ export DVRK_PYBULLET_PYTHON="$HOME/wss/dvrk/.venv/bin/python"
 ```
 
 The selected interpreter is then recorded in
-`<workspace>/.generated/pybullet/python-runtime.json`, so later shells reuse
-it without the environment variable.  The launch log reports both the chosen
+`~/.cache/dvrk_pybullet/python-runtime.json`, so later shells reuse
+it without the environment variable. The launch log reports both the chosen
 interpreter and whether it came from the environment, saved selection, or
-current ROS Python.  Removing `.generated` simply causes the next launch to
+current ROS Python. Removing the cache simply causes the next launch to
 select it again.
 
 The simulator currently supports shared-world kinematic PSM and ECM models,
@@ -29,10 +41,10 @@ Unix-FD transport.
 `dvrk_model` is located only through the ROS 2 ament index. The Virtual PSM
 Xacro is expanded and its `package://dvrk_model/...` resources are converted to
 validated absolute paths for PyBullet. Generated URDF and metadata files live
-outside `src`:
+in the user cache:
 
 ```text
-<workspace>/.generated/pybullet/<content-hash>/
+~/.cache/dvrk_pybullet/<content-hash>/
 ├── model.urdf
 └── metadata.json
 ```
@@ -138,61 +150,12 @@ ros2 run dvrk_python dvrk_arm_test.py -a PSM1
 ros2 run dvrk_python dvrk_arm_test.py -a PSM2
 ```
 
-Inspect the state from another sourced terminal:
-
-```shell
-ros2 topic list | grep PSM1
-ros2 topic echo /PSM1/measured_js --once
-ros2 topic echo /PSM1/measured_cp --once
-```
-
-Send one direct joint setpoint (positions are radians except insertion, which is
-metres):
-
-```shell
-ros2 topic pub --once /PSM1/servo_jp sensor_msgs/msg/JointState \
-  "{name: [yaw, pitch, insertion, roll, wrist_pitch, wrist_yaw], position: [0.2, 0.1, 0.14, 0.0, 0.2, -0.2]}"
-```
-
-Send a velocity-limited joint move and open the jaw:
-
-```shell
-ros2 topic pub --once /PSM1/move_jp sensor_msgs/msg/JointState \
-  "{name: [yaw, pitch, insertion, roll, wrist_pitch, wrist_yaw], position: [-0.2, 0.15, 0.10, 0.3, -0.2, 0.2]}"
-
-ros2 topic pub --once /PSM1/jaw/move_jp sensor_msgs/msg/JointState \
-  "{position: [0.7]}"
-```
-
-Cartesian servo and move commands use world-frame poses when running a single
-arm without an ECM reference:
-
-```shell
-ros2 topic pub --once /PSM1/servo_cp geometry_msgs/msg/PoseStamped \
-  "{header: {frame_id: world}, pose: {position: {x: 0.01, y: 0.0, z: -0.1237}, orientation: {x: 0.7071, y: 0.7071, z: 0.0, w: 0.0}}}"
-```
-
 The PyBullet backend solves all six pose coordinates numerically using its own
 forward kinematics. This keeps the URDF mimic joints constrained by the logical
 PSM joints during IK.
-
-Motion is accepted while the arm is enabled and homed. The node starts in that
-state. Operating-state commands can be tested with:
-
-```shell
-ros2 topic pub --once /PSM1/state_command crtk_msgs/msg/StringStamped \
-  "{string: pause}"
-ros2 topic pub --once /PSM1/state_command crtk_msgs/msg/StringStamped \
-  "{string: resume}"
-```
-
-`servo_jp` commands supersede older pending servo commands; `move_jp` and state
-commands use a bounded ordered queue. Joint and jaw limits are checked before a
-command is applied. Moves are synchronized linear trajectories using the
-configured velocity limits, and the operating-state `is_busy` flag covers the
-move. The jaw command drives the URDF's named mimic joints.
 
 Control is deliberately kinematic at this milestone: setpoints are applied with
 PyBullet joint resets. No link masses, motor gains, or PID tuning are required
 until the backend advances to dynamic control. ROS callbacks only validate and
 enqueue commands; all PyBullet calls remain on the owner thread.
+

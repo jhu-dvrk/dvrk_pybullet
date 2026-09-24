@@ -34,12 +34,10 @@ class MaterializedUrdf:
 
 
 def default_generated_root(anchor: str | Path | None = None) -> Path:
-    """Use the workspace ``.generated`` directory used by dvrk_isaac_sim."""
-    source = Path(anchor or __file__).resolve()
-    for parent in source.parents:
-        if parent.name in {"src", "install"}:
-            return parent.parent / ".generated" / "pybullet"
-    return Path.cwd().resolve() / ".generated" / "pybullet"
+    """Return the user cache directory for PyBullet artifacts."""
+    cache_root = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+    return (cache_root / "dvrk_pybullet").resolve()
+
 
 
 def _expand_virtual_robot(

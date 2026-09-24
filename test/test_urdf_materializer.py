@@ -8,9 +8,10 @@ from dvrk_pybullet.urdf_materializer import (
 )
 
 
-def test_generated_root_is_workspace_local():
-    anchor = Path("/work/ws/src/dvrk/dvrk_pybullet/dvrk_pybullet/module.py")
-    assert default_generated_root(anchor) == Path("/work/ws/.generated/pybullet")
+def test_generated_root_is_cache_directory():
+    import os
+    cache_root = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+    assert default_generated_root() == cache_root / "dvrk_pybullet"
 
 
 def test_virtual_psm1_is_expanded_and_cached(tmp_path):
