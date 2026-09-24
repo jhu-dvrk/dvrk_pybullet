@@ -12,15 +12,9 @@ data_files = [
     (f"share/{package_name}", ["package.xml", "requirements.txt"]),
     (f"share/{package_name}/share", ["share/pybullet.yaml"]),
     (f"share/{package_name}/share", ["share/pybullet.yaml.example"]),
-    (f"share/{package_name}/share/scenes", [
-        str(path) for path in sorted(Path("share/scenes").glob("*.yaml"))
-    ]),
     (f"share/{package_name}/share/open-xr", [
         str(path) for path in sorted(Path("share/open-xr").glob("*"))
         if path.is_file()
-    ]),
-    (f"share/{package_name}/share/schemas", [
-        "share/schemas/openxr-video.schema.json",
     ]),
     (f"share/{package_name}/launch", [
         "launch/open_xr.launch.py",
@@ -29,6 +23,10 @@ data_files = [
     ]),
     (f"share/{package_name}/scripts", script_files),
 ]
+
+scene_files = [str(path) for path in sorted(Path("share/scenes").glob("*.yaml"))]
+if scene_files:
+    data_files.append((f"share/{package_name}/share/scenes", scene_files))
 
 
 setup(
