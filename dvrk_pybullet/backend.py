@@ -17,7 +17,7 @@ def load_pybullet() -> ModuleType:
             "From the colcon workspace root, bootstrap the venv, activate it, "
             "and rebuild:\n\n"
             "  ./src/dvrk/dvrk_pybullet/scripts/bootstrap_venv.sh\n"
-            "  source .venv/bin/activate\n"
+            "  source .venv-pybullet/bin/activate\n"
             "  hash -r\n"
             "  colcon build --symlink-install --packages-select "
             "dvrk_simulator_base dvrk_pybullet\n"

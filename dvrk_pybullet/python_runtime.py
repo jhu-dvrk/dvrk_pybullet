@@ -35,7 +35,7 @@ def resolve_pybullet_python(
         generated_root=generated_root,
         default_generated_root=default_generated_root(),
         check_import_fn=_imports_pybullet,
-        workspace_venv_names=(".venv", ".venv-pybullet"),
+        workspace_venv_names=(".venv-pybullet", ".venv"),
         bootstrap_command="./src/dvrk/dvrk_pybullet/scripts/bootstrap_venv.sh",
         result_factory=PyBulletPython,
         source_file=__file__,

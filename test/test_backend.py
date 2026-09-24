@@ -19,7 +19,7 @@ def test_missing_pybullet_has_actionable_error(monkeypatch):
         load_pybullet()
     message = str(captured.value)
     assert "bootstrap_venv.sh" in message
-    assert "source .venv/bin/activate" in message
+    assert "source .venv-pybullet/bin/activate" in message
     assert "colcon build --symlink-install" in message
 
 

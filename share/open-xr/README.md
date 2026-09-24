@@ -29,7 +29,7 @@ Follow the `sawOpenXR` documentation to prepare and connect the headset, then
 launch the patient cart and console together:
 
 ```bash
-source ~/wss/dvrk/.venv/bin/activate
+source ~/wss/dvrk/.venv-pybullet/bin/activate
 source ~/wss/dvrk/install/setup.bash
 ros2 launch dvrk_pybullet open_xr.launch.py
 ```

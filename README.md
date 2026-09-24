@@ -6,7 +6,7 @@ must not depend on SurRoL.
 
 PyBullet is required only when the backend runs, not when it builds. Dependencies are listed in `requirements.txt`. You can configure the Python environment in either of two ways:
 
-1. **Use the bootstrap script** to create a workspace virtual environment (`.venv`) with `--system-site-packages` and install dependencies using pip:
+1. **Use the bootstrap script** to create a workspace virtual environment (`.venv-pybullet`) with `--system-site-packages` and install dependencies using pip:
    ```shell
    ./src/dvrk/dvrk_pybullet/scripts/bootstrap_venv.sh
    ```
@@ -22,7 +22,7 @@ PyBullet is installed in a different virtual environment, select it for the
 current shell without changing project files:
 
 ```shell
-export DVRK_PYBULLET_PYTHON="$HOME/wss/dvrk/.venv/bin/python"
+export DVRK_PYBULLET_PYTHON="$HOME/wss/dvrk/.venv-pybullet/bin/python"
 ```
 
 The selected interpreter is then recorded in

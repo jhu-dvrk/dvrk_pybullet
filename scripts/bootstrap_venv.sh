@@ -18,7 +18,7 @@ if [[ ! -f "${BASE_BOOTSTRAP}" ]]; then
 fi
 
 exec "${BASE_BOOTSTRAP}" \
-    ".venv" \
+    ".venv-pybullet" \
     "${SCRIPT_DIR}/../requirements.txt" \
     "PyBullet" \
     "-c 'import pybullet; print(\"PyBullet ready!\")'" \
