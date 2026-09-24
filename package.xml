@@ -6,8 +6,6 @@
   <maintainer email="anton.deguet@jhu.edu">Anton Deguet</maintainer>
   <license>Apache-2.0</license>
 
-  <buildtool_depend>ament_python</buildtool_depend>
-
   <exec_depend>crtk_msgs</exec_depend>
   <exec_depend>diagnostic_msgs</exec_depend>
   <exec_depend>dvrk_model</exec_depend>
