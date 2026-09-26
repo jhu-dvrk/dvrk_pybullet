@@ -41,25 +41,8 @@ def _worker_main(robots, camera_options, scene_objects, initial_state, states, s
         status.put(("ready", ""))
         period = 1.0 / camera_options.rate_hz
         while True:
-            now = time.monotonic()
-            if now >= next_frame:
-                # State updates normally arrive faster than the camera rate.
-                # Rendering must be scheduled independently of those updates:
-                # waiting for Queue.get to time out would otherwise never
-                # render while the simulation is active.
-                scene.render(latest, now)
-                next_frame += period
-                if next_frame <= now:
-                    next_frame = now + period
-                continue
-            wait = next_frame - now
-            try:
-                candidate = states.get(timeout=wait)
-            except Empty:
-                continue
-            if candidate == "shutdown":
-                return
-            latest = candidate
+            # A slow render can overrun the camera period.  Drain the state
+            # queue before every render so it never repeats an old robot pose.
             try:
                 while True:
                     candidate = states.get_nowait()
@@ -68,6 +51,19 @@ def _worker_main(robots, camera_options, scene_objects, initial_state, states, s
                     latest = candidate
             except Empty:
                 pass
+
+            now = time.monotonic()
+            if now >= next_frame:
+                scene.render(latest, now)
+                next_frame = max(next_frame + period, time.monotonic())
+                continue
+            try:
+                candidate = states.get(timeout=next_frame - now)
+            except Empty:
+                continue
+            if candidate == "shutdown":
+                return
+            latest = candidate
     except BaseException as error:
         status.put(("error", f"{type(error).__name__}: {error}"))
     finally:
