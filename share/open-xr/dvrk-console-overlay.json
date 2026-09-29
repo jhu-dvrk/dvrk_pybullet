@@ -10,5 +10,5 @@
     "height": 720
   },
   "display_horizontal_offset_px": -50,
-  "sinks": []
+  "sinks": ["side_by_side"]
 }

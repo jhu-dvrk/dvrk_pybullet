@@ -16,8 +16,13 @@ data_files = [
         str(path) for path in sorted(Path("share/open-xr").glob("*"))
         if path.is_file()
     ]),
+    (f"share/{package_name}/share/3dconnexion", [
+        str(path) for path in sorted(Path("share/3dconnexion").glob("*"))
+        if path.is_file()
+    ]),
     (f"share/{package_name}/launch", [
         "launch/open_xr.launch.py",
+        "launch/3dconnexion.launch.py",
         "launch/simulator.launch.py",
         "launch/test_scene.launch.py",
     ]),
