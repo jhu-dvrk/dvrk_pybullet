@@ -94,6 +94,7 @@ class DvrkPyBulletNode(Node):
                     self, config, capacity, ecm_interface=ecm
                 )
         self._publishing_enabled = True
+        self._runtime = None
         self._state_publish_timer = self.create_timer(
             1.0 / state_rate, self._publish_latest
         )
@@ -176,6 +177,10 @@ class DvrkPyBulletNode(Node):
         status.message = "running" if simulation_hz > 0.0 else "waiting for simulation"
         status.values = [
             KeyValue(key="simulation_hz", value=f"{simulation_hz:.1f}"),
+            KeyValue(
+                key="camera_hz",
+                value=f"{self._runtime.take_camera_rate_hz() if self._runtime else 0.0:.1f}",
+            ),
             KeyValue(key="state_publish_hz", value=f"{self._state_publish_rate_hz:.1f}"),
             KeyValue(key="arms", value=str(len(self.arm_interfaces))),
             KeyValue(key="camera_enabled", value=str(self.camera_options.enabled).lower()),
@@ -292,6 +297,7 @@ def main(args=None) -> int:
             scene_objects=node.scene_objects,
             grasp_config=config.grasp,
         )
+        node._runtime = runtime
         node.install_initial_snapshots(runtime.initialize())
         node.get_logger().info(
             "loaded shared PyBullet world: " + ", ".join(node.arm_interfaces)

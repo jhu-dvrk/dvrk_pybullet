@@ -30,7 +30,9 @@ def _exit_when_parent_exits() -> None:
         raise SystemExit(0)
 
 
-def _worker_main(robots, camera_options, scene_objects, initial_state, states, status) -> None:
+def _worker_main(
+    robots, camera_options, scene_objects, initial_state, states, status, frame_count
+) -> None:
     scene = None
     try:
         _exit_when_parent_exits()
@@ -55,6 +57,8 @@ def _worker_main(robots, camera_options, scene_objects, initial_state, states, s
             now = time.monotonic()
             if now >= next_frame:
                 scene.render(latest, now)
+                with frame_count.get_lock():
+                    frame_count.value += 1
                 next_frame = max(next_frame + period, time.monotonic())
                 continue
             try:
@@ -81,7 +85,20 @@ class CameraWorker:
         self._context = get_context("spawn")
         self._states = self._context.Queue(maxsize=1)
         self._status = self._context.Queue()
+        self._frame_count = self._context.Value("Q", 0)
         self._process = None
+        self._last_rate_sample_at = time.monotonic()
+        self._last_rate_sample_count = 0
+
+    def take_camera_rate_hz(self) -> float:
+        now = time.monotonic()
+        elapsed = max(now - self._last_rate_sample_at, 1e-6)
+        with self._frame_count.get_lock():
+            count = self._frame_count.value
+        rate = (count - self._last_rate_sample_count) / elapsed
+        self._last_rate_sample_at = now
+        self._last_rate_sample_count = count
+        return rate
 
     def _robots(self):
         return tuple(
@@ -100,7 +117,7 @@ class CameraWorker:
         self._process = self._context.Process(
             target=_worker_main,
             args=(self._robots(), self.camera_options, self.scene_objects, initial_state,
-                  self._states, self._status),
+                  self._states, self._status, self._frame_count),
             daemon=True,
         )
         self._process.start()

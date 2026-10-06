@@ -215,6 +215,12 @@ class PyBulletWorldRuntime:
             else:
                 deadline = time.monotonic()
 
+    def take_camera_rate_hz(self) -> float:
+        """Return the camera worker's successfully rendered frame rate."""
+        if self.camera_worker is None:
+            return 0.0
+        return self.camera_worker.take_camera_rate_hz()
+
     def shutdown(self) -> None:
         if self.camera_worker is not None:
             self.camera_worker.close()
