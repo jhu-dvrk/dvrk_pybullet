@@ -8,7 +8,6 @@ from dvrk_simulator_base.command_mailbox import CommandMailboxes
 from dvrk_simulator_base.cartesian_command import CartesianCommand
 from dvrk_simulator_base.types import Pose
 
-import dvrk_pybullet.runtime as runtime_module
 from dvrk_pybullet.runtime import PyBulletArm, RuntimeOptions
 from dvrk_pybullet.world_runtime import PyBulletWorldRuntime
 
@@ -66,7 +65,7 @@ def _runtime_without_connection(monkeypatch):
 
 def test_servo_and_move_commands_are_applied_kinematically(monkeypatch):
     runtime = _runtime_without_connection(monkeypatch)
-    servo = runtime.commands.submit_servo(
+    runtime.commands.submit_servo(
         "servo_jp", np.array([0.1, 0.2, 0.12, 0.3, 0.4, 0.5])
     )
     runtime._update_commands(10.0)
@@ -104,7 +103,7 @@ def test_limits_and_operating_state_gate_motion(monkeypatch):
     runtime._update_commands(2.0)
     assert not runtime._operating_state.accepts_motion
 
-    servo = runtime.commands.submit_servo(
+    runtime.commands.submit_servo(
         "servo_jp", np.array([0.1, 0.0, 0.12, 0.0, 0.0, 0.0])
     )
     runtime._update_commands(3.0)

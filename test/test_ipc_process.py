@@ -1,6 +1,5 @@
 """Exercise the actual PyBullet worker across the shared Unix socket boundary."""
-import os
-import sys
+
 import time
 from types import SimpleNamespace
 import numpy as np
@@ -9,6 +8,7 @@ from dvrk_simulator_base.command_mailbox import CommandMailboxes
 from dvrk_simulator_base.ros_interface import LatestSnapshot
 from dvrk_simulator_base.cartesian_command import CartesianCommand
 from dvrk_simulator_base.types import Pose
+from dvrk_pybullet.python_runtime import resolve_pybullet_python
 class FakeNode:
     def __init__(self):
         self.arm_interfaces = {name: SimpleNamespace(commands=CommandMailboxes(), snapshots=LatestSnapshot(),
@@ -51,7 +51,8 @@ def test_pybullet_worker_moving_ecm_cartesian_command_and_state(tmp_path, monkey
     - {config: ECM.yaml, endoscope: Si_straight}
     - {config: PSM1.yaml, instrument: '420006'}
 """)
-    process = ipc_runtime.SimulationProcess(sys.executable, "dvrk_pybullet.simulation_worker", {
+    python_bin = resolve_pybullet_python().path
+    process = ipc_runtime.SimulationProcess(python_bin, "dvrk_pybullet.simulation_worker", {
         "config": str(config), "scene": [str(scene)], "gui": False,
     })
     node = FakeNode()

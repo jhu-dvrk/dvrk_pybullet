@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from dvrk_pybullet import python_runtime
 
 

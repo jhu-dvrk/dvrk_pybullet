@@ -4,11 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .errors import GStreamerDependencyError, PyBulletBackendError
-from dvrk_simulator_base.video import (
-    UnixFdVideoSink as _BaseUnixFdVideoSink,
-    VideoFrame,
-)
+from .errors import PyBulletBackendError
+from dvrk_simulator_base.video import UnixFdVideoSink as _BaseUnixFdVideoSink
 
 
 class UnixFdVideoSink(_BaseUnixFdVideoSink):
