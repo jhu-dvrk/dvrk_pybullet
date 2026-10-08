@@ -9,7 +9,7 @@ script_files = ["scripts/simulator.py", "scripts/bootstrap_venv.sh"]
 
 data_files = [
     ("share/ament_index/resource_index/packages", [f"resource/{package_name}"]),
-    (f"share/{package_name}", ["package.xml", "requirements.txt"]),
+    (f"share/{package_name}", ["package.xml", "requirements.txt", "requirements-build.txt"]),
     (f"share/{package_name}/share", ["share/pybullet.yaml"]),
     (f"share/{package_name}/share", ["share/pybullet.yaml.example"]),
     (f"share/{package_name}/share/open-xr", [
@@ -48,7 +48,6 @@ setup(
     entry_points={
         "console_scripts": [
             "simulator_node = dvrk_pybullet.node:main",
-            "dvrk_pybullet_preview = dvrk_pybullet.preview:main",
         ],
     },
 )

@@ -4,7 +4,6 @@ import xml.etree.ElementTree as ET
 from dvrk_pybullet.urdf_materializer import (
     default_generated_root,
     materialize_virtual_robot,
-    materialize_virtual_psm,
 )
 
 
@@ -15,8 +14,8 @@ def test_generated_root_is_cache_directory():
 
 
 def test_virtual_psm1_is_expanded_and_cached(tmp_path):
-    first = materialize_virtual_psm(generated_root=tmp_path)
-    second = materialize_virtual_psm(generated_root=tmp_path)
+    first = materialize_virtual_robot("PSM1", instrument="420006", generated_root=tmp_path)
+    second = materialize_virtual_robot("PSM1", instrument="420006", generated_root=tmp_path)
 
     assert first == second
     assert first.urdf_path.is_file()
@@ -43,7 +42,7 @@ def test_virtual_ecm_is_expanded_and_cached(tmp_path):
 
 def test_virtual_large_needle_driver_has_primitive_contact_shapes(tmp_path):
     for instrument in ("400006", "420006"):
-        result = materialize_virtual_psm(instrument=instrument, generated_root=tmp_path)
+        result = materialize_virtual_robot("PSM1", instrument=instrument, generated_root=tmp_path)
         robot = ET.parse(result.urdf_path).getroot()
         links = {link.attrib["name"]: link for link in robot.findall("link")}
         for suffix in (

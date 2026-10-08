@@ -1,22 +1,21 @@
-"""Single-thread-owned PyBullet runtime for one Virtual PSM."""
+"""Per-arm kinematics and command execution within a shared PyBullet world."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-import time
 
 import numpy as np
 
 from dvrk_arm_description import RobotConfig
 from dvrk_simulator_base.command_mailbox import CommandMailboxes
+from dvrk_simulator_base.cartesian_command import CartesianCommand, resolve_cartesian_command
 from dvrk_simulator_base.operating_state import CRTKOperatingState
 from dvrk_simulator_base.snapshots import ArmSnapshot, OperatingStateSnapshot
 from dvrk_simulator_base.rotations import quaternion_matrix_xyzw
 from dvrk_simulator_base.types import IKResult, JointState, Pose, Twist
 from dvrk_simulator_base.trajectory import JointTrajectory
 
-from .backend import load_pybullet
 from .errors import PyBulletBackendError
 from .robot import (
     LoadedRobot,
@@ -34,24 +33,23 @@ class RuntimeOptions:
     generated_root: Path | None = None
 
 
-class PyBulletRuntime:
-    """Own all calls into one PyBullet connection."""
+class PyBulletArm:
+    """An arm whose connection and step lifecycle are owned by its world."""
 
     def __init__(
         self,
         config: RobotConfig,
         options: RuntimeOptions,
-        commands: CommandMailboxes | None = None,
-        pybullet_client=None,
+        commands: CommandMailboxes,
+        pybullet_client,
     ) -> None:
         if options.simulation_rate_hz <= 0.0:
             raise ValueError("simulation_rate_hz must be positive")
         self.config = config
         self.options = options
-        self.commands = commands or CommandMailboxes()
-        self.pybullet = pybullet_client or load_pybullet()
+        self.commands = commands
+        self.pybullet = pybullet_client
         self.connection = -1
-        self._owns_connection = False
         self.artifact: MaterializedUrdf | None = None
         self.robot: LoadedRobot | None = None
         self._tool_link_index: int | None = None
@@ -73,23 +71,13 @@ class PyBulletRuntime:
             raise ValueError("jaw lower limit cannot exceed upper limit")
         if not np.isfinite(self._jaw_speed) or self._jaw_speed <= 0.0:
             raise ValueError("jaw velocity must be finite and positive")
-        self.commands_applied = 0
-        self.commands_rejected = 0
-        self.commands_canceled = 0
+
+        self.command_warnings = []
         self._sequence = 0
         self._simulation_time = 0.0
 
-    def initialize(self, connection: int | None = None) -> ArmSnapshot:
-        if connection is None:
-            mode = self.pybullet.GUI if self.options.gui else self.pybullet.DIRECT
-            self.connection = self.pybullet.connect(mode)
-            self._owns_connection = True
-            if self.connection < 0:
-                raise PyBulletBackendError("PyBullet could not create a connection")
-            self.pybullet.setGravity(0.0, 0.0, -9.81)
-        else:
-            self.connection = int(connection)
-            self._owns_connection = False
+    def initialize(self, connection: int) -> ArmSnapshot:
+        self.connection = connection
         try:
             self.artifact = materialize_virtual_robot(
                 self.config.name,
@@ -125,35 +113,13 @@ class PyBulletRuntime:
                     + ", ".join(tool_names)
                 )
 
-            if self.options.gui and self._owns_connection:
-                self.pybullet.resetDebugVisualizerCamera(
-                    cameraDistance=0.65,
-                    cameraYaw=45.0,
-                    cameraPitch=-25.0,
-                    cameraTargetPosition=(0.0, 0.0, 0.12),
-                )
-            self.pybullet.stepSimulation()
-            self._apply_setpoints()
-            self._apply_jaw_setpoint()
             return self.snapshot()
         except BaseException:
             self.shutdown()
             raise
 
-    def is_connected(self) -> bool:
-        return self.connection >= 0 and bool(self.pybullet.isConnected(self.connection))
-
-    def step(self) -> ArmSnapshot:
-        if self.robot is None:
-            raise RuntimeError("PyBullet runtime is not initialized")
-        now_ns = time.monotonic_ns()
-        self.prepare_step(now_ns, now_ns * 1e-9)
-        self.pybullet.stepSimulation()
-        return self.finish_step()
-
-    def prepare_step(self, now_ns: int, now: float) -> None:
-        """Drain commands before the shared world advances."""
-        self._update_commands(now_ns, now)
+    def prepare_step(self, now: float, ecm_pose=None, *, has_ecm=False) -> None:
+        self._update_commands(now, ecm_pose, has_ecm=has_ecm)
 
     def finish_step(self) -> ArmSnapshot:
         """Apply this arm's kinematic state after one shared world step."""
@@ -167,113 +133,83 @@ class PyBulletRuntime:
         self._operating_state_event_pending = False
         return result
 
-    def _update_commands(self, now_ns: int, now: float) -> None:
+    def _update_commands(self, now: float, ecm_pose=None, *, has_ecm=False) -> None:
         if self._move_failure_pending:
             self._move_failure_pending = False
         joint_move_started = False
         jaw_move_started = False
         for command in self.commands.drain():
-            if command.channel == "state_command":
+            if command.channel == 'state_command':
                 success, _ = self._operating_state.command(command.payload)
                 if not success:
-                    self.commands_rejected += 1
                     continue
-                self.commands_applied += 1
                 self._operating_state_event_pending = True
                 if not self._operating_state.accepts_motion:
                     self._cancel_motion()
                 continue
-
             if not self._operating_state.accepts_motion:
-                self.commands_rejected += 1
                 if self._is_move_command(command.channel):
                     self._move_failure_pending = True
                 continue
-
-            if command.channel in {"servo_jp", "move_jp"}:
+            if command.channel in {'servo_jp', 'move_jp'}:
                 target = np.asarray(command.payload, dtype=float)
                 if not self._valid_joint_target(target):
-                    self.commands_rejected += 1
-                    if command.channel == "move_jp":
+                    if command.channel == 'move_jp':
                         self._move_failure_pending = True
                     continue
-                if command.channel == "servo_jp":
-                    if self._joint_trajectory is not None:
-                        self.commands_canceled += 1
+                if command.channel == 'servo_jp':
                     self._joint_trajectory = None
                     self._joint_setpoint = target.copy()
                     self._joint_velocity = np.zeros_like(target)
                 else:
-                    if self._joint_trajectory is not None:
-                        self.commands_canceled += 1
-                    self._joint_trajectory = JointTrajectory(
-                        self._joint_setpoint,
-                        target,
-                        [joint.velocity for joint in self.config.joints],
-                        now,
-                    )
+                    self._joint_trajectory = JointTrajectory(self._joint_setpoint, target, [joint.velocity for joint in self.config.joints], now)
                     joint_move_started = True
-                self.commands_applied += 1
                 continue
-
-            if command.channel in {"servo_cp", "move_cp"}:
-                result = self.compute_ik(command.payload, self._joint_setpoint)
+            if command.channel in {'servo_cp', 'move_cp'}:
+                target = command.payload
+                if isinstance(target, CartesianCommand):
+                    try:
+                        target = resolve_cartesian_command(target, self.config, ecm_pose, has_ecm=has_ecm)
+                    except (TypeError, ValueError, AttributeError) as error:
+                        self.command_warnings.append(f"rejected {command.channel}: {error}")
+                        if command.channel == "move_cp":
+                            self._move_failure_pending = True
+                        continue
+                result = self.compute_ik(target, self._joint_setpoint)
                 if not result.success or not self._valid_joint_target(result.position):
-                    self.commands_rejected += 1
-                    if command.channel == "move_cp":
+                    self.command_warnings.append(f"rejected {command.channel}: IK failed or joint limits exceeded")
+                    if command.channel == 'move_cp':
                         self._move_failure_pending = True
                     continue
-                if command.channel == "servo_cp":
-                    if self._joint_trajectory is not None:
-                        self.commands_canceled += 1
+                if command.channel == 'servo_cp':
                     self._joint_trajectory = None
                     self._joint_setpoint = result.position.copy()
                     self._joint_velocity = np.zeros_like(self._joint_setpoint)
                 else:
-                    if self._joint_trajectory is not None:
-                        self.commands_canceled += 1
-                    self._joint_trajectory = JointTrajectory(
-                        self._joint_setpoint,
-                        result.position,
-                        [joint.velocity for joint in self.config.joints],
-                        now,
-                    )
+                    self._joint_trajectory = JointTrajectory(self._joint_setpoint, result.position, [joint.velocity for joint in self.config.joints], now)
                     joint_move_started = True
-                self.commands_applied += 1
                 continue
-
-            if command.channel in {"jaw/servo_jp", "jaw/move_jp"}:
+            if command.channel in {'jaw/servo_jp', 'jaw/move_jp'}:
                 target = float(command.payload)
                 if not np.isfinite(target) or not self._jaw_lower <= target <= self._jaw_upper:
-                    self.commands_rejected += 1
-                    if command.channel == "jaw/move_jp":
+                    if command.channel == 'jaw/move_jp':
                         self._move_failure_pending = True
                     continue
-                if command.channel == "jaw/servo_jp":
-                    if self._jaw_trajectory is not None:
-                        self.commands_canceled += 1
+                if command.channel == 'jaw/servo_jp':
                     self._jaw_trajectory = None
                     self._jaw_setpoint = target
                     self._jaw_velocity = 0.0
                 else:
-                    if self._jaw_trajectory is not None:
-                        self.commands_canceled += 1
-                    self._jaw_trajectory = JointTrajectory(
-                        [self._jaw_setpoint], [target], [self._jaw_speed], now
-                    )
+                    self._jaw_trajectory = JointTrajectory([self._jaw_setpoint], [target], [self._jaw_speed], now)
                     jaw_move_started = True
-                self.commands_applied += 1
                 continue
-
-            self.commands_rejected += 1
-
-        if self._joint_trajectory is not None and not joint_move_started:
+        if self._joint_trajectory is not None and (not joint_move_started):
             sample = self._joint_trajectory.sample(now)
             self._joint_setpoint = sample.position.copy()
             self._joint_velocity = sample.velocity.copy()
             if sample.complete:
                 self._joint_trajectory = None
-        if self._jaw_trajectory is not None and not jaw_move_started:
+        if self._jaw_trajectory is not None and (not jaw_move_started):
             sample = self._jaw_trajectory.sample(now)
             self._jaw_setpoint = float(sample.position[0])
             self._jaw_velocity = float(sample.velocity[0])
@@ -293,8 +229,6 @@ class PyBulletRuntime:
         return channel in {"move_jp", "move_cp", "jaw/move_jp"}
 
     def _cancel_motion(self) -> None:
-        self.commands_canceled += int(self._joint_trajectory is not None)
-        self.commands_canceled += int(self._jaw_trajectory is not None)
         self._joint_trajectory = None
         self._jaw_trajectory = None
         self._joint_velocity.fill(0.0)
@@ -506,26 +440,5 @@ class PyBulletRuntime:
             operating_state_event=self._operating_state_event_pending,
         )
 
-    def run(self, publish_snapshot, should_continue=None) -> None:
-        period = 1.0 / self.options.simulation_rate_hz
-        deadline = time.monotonic()
-        while self.is_connected() and (
-            should_continue is None or should_continue()
-        ):
-            snapshot = self.step()
-            publish_snapshot(snapshot)
-            deadline += period
-            remaining = deadline - time.monotonic()
-            if remaining > 0.0:
-                time.sleep(remaining)
-            else:
-                deadline = time.monotonic()
-
     def shutdown(self) -> None:
-        if (
-            self._owns_connection
-            and self.connection >= 0
-            and self.pybullet.isConnected(self.connection)
-        ):
-            self.pybullet.disconnect(self.connection)
         self.connection = -1

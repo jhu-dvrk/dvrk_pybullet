@@ -10,6 +10,7 @@ import numpy as np
 from dvrk_simulator_base.command_mailbox import CommandMailboxes
 from dvrk_arm_description import RobotConfig
 from dvrk_simulator_base.snapshots import ArmSnapshot
+from dvrk_simulator_base.publication_frames import with_publication_frames
 from dvrk_simulator_base.scene import SceneObject
 
 from .backend import load_pybullet
@@ -17,7 +18,7 @@ from .camera_worker import CameraWorker
 from .collision_debug import CollisionShapeOverlay
 from .errors import PyBulletBackendError
 from .grasp import GraspManager
-from .runtime import PyBulletRuntime, RuntimeOptions
+from .runtime import PyBulletArm, RuntimeOptions
 from .scene_objects import load_scene_objects, resolve_asset_uri
 
 
@@ -44,9 +45,11 @@ class PyBulletWorldRuntime:
         self.collision_debug = None
         self._reset_requested = False
         self._initial_object_poses = {}
+        self.command_warnings = []
+        self._frame_snapshots = {}
         self.camera_worker = None
         self.arms = {
-            config.name: PyBulletRuntime(
+            config.name: PyBulletArm(
                 config,
                 options,
                 commands=commands[config.name],
@@ -93,6 +96,8 @@ class PyBulletWorldRuntime:
                 contact_region_offset=(self.grasp_config.contact_region_offset_m if self.grasp_config else (0.0, 0.0, -0.003)),
                 contact_region_radius=(self.grasp_config.contact_region_radius_m if self.grasp_config else 0.008),
             )
+            snapshots = with_publication_frames(snapshots, [arm.config for arm in self.arms.values()])
+            self._frame_snapshots = snapshots
             self._start_camera_worker(snapshots)
             if self.options.gui:
                 self.pybullet.resetDebugVisualizerCamera(
@@ -153,12 +158,17 @@ class PyBulletWorldRuntime:
         if self._reset_requested:
             self._reset_scene()
             self._reset_requested = False
-        now_ns = time.monotonic_ns()
-        now = now_ns * 1e-9
-        for arm in self.arms.values():
-            arm.prepare_step(now_ns, now)
+        now = time.monotonic()
+        ecm = next((arm for arm in self.arms.values() if arm.config.type == "ECM"), None)
+        ecm_pose = None if ecm is None else self._frame_snapshots[ecm.config.name].measured_cp_world
+        for name, arm in self.arms.items():
+            arm.prepare_step(now, ecm_pose, has_ecm=arm.config.type == "PSM" and ecm is not None)
+            self.command_warnings.extend((name, text) for text in arm.command_warnings)
+            arm.command_warnings.clear()
         self.pybullet.stepSimulation()
         snapshots = {name: arm.finish_step() for name, arm in self.arms.items()}
+        snapshots = with_publication_frames(snapshots, [arm.config for arm in self.arms.values()])
+        self._frame_snapshots = snapshots
         if self.grasp_manager is not None:
             self.grasp_manager.step(snapshots)
         if self.collision_debug is not None:
@@ -200,20 +210,6 @@ class PyBulletWorldRuntime:
             self.pybullet.resetBaseVelocity(
                 item.body_id, (0, 0, 0), (0, 0, 0), physicsClientId=self.connection
             )
-
-    def run(self, publish_snapshots, should_continue=None) -> None:
-        period = 1.0 / self.options.simulation_rate_hz
-        deadline = time.monotonic()
-        while self.is_connected() and (
-            should_continue is None or should_continue()
-        ):
-            publish_snapshots(self.step())
-            deadline += period
-            remaining = deadline - time.monotonic()
-            if remaining > 0.0:
-                time.sleep(remaining)
-            else:
-                deadline = time.monotonic()
 
     def take_camera_rate_hz(self) -> float:
         """Return the camera worker's successfully rendered frame rate."""

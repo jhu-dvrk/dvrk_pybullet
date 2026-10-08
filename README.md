@@ -17,7 +17,7 @@ PyBullet is required only when the backend runs, not when it builds. Dependencie
    pip install -r src/dvrk/dvrk_pybullet/requirements.txt
    ```
 
-Launch files use the current Python interpreter when it can import `pybullet`. If
+The ROS frontend uses ROS Python and starts a separate simulation interpreter. If
 PyBullet is installed in a different virtual environment, select it for the
 current shell without changing project files:
 
@@ -31,6 +31,19 @@ it without the environment variable. The launch log reports both the chosen
 interpreter and whether it came from the environment, saved selection, or
 current ROS Python. Removing the cache simply causes the next launch to
 select it again.
+
+The bootstrap checks `pybullet.isNumpyEnabled()` and rebuilds the same PyBullet
+version with NumPy headers if necessary. Source builds under pip isolation can
+otherwise silently omit NumPy support: `getCameraImage` returns Python tuples
+instead of arrays, which is very expensive for high-resolution stereo video.
+The bootstrap installs build dependencies before compiling and avoids reusing a
+cached wheel without NumPy support. To check an existing environment:
+
+```shell
+.venv-pybullet/bin/python -c 'import pybullet; print(pybullet.isNumpyEnabled())'
+```
+
+The result should be `1`. Rerun the bootstrap to repair a result of `0`.
 
 The simulator currently supports shared-world kinematic PSM and ECM models,
 CRTK ROS interfaces, and an ECM optical camera exported through GStreamer's
@@ -51,23 +64,6 @@ in the user cache:
 
 The content-addressed entry is reused while the expanded model, instrument,
 parent link, and materializer version remain unchanged.
-
-## Preview PSM1
-
-Build and source the two packages from the workspace, activate the environment
-containing PyBullet, and open the GUI:
-
-```shell
-cd ~/wss/dvrk
-colcon build --symlink-install \
-  --packages-select dvrk_simulator_base dvrk_pybullet
-source install/setup.bash
-ros2 run dvrk_pybullet dvrk_pybullet_preview --model PSM1 --instrument 420006
-```
-
-The preview loads the Virtual PSM at its configured home position and remains
-open until the window is closed or Ctrl-C is pressed. Use `--duration 10` for
-an automatically closing ten-second preview.
 
 ## ROS simulator node
 
@@ -157,5 +153,20 @@ PSM joints during IK.
 Control is deliberately kinematic at this milestone: setpoints are applied with
 PyBullet joint resets. No link masses, motor gains, or PID tuning are required
 until the backend advances to dynamic control. ROS callbacks only validate and
-enqueue commands; all PyBullet calls remain on the owner thread.
+enqueue commands. The simulation process owns all control-world PyBullet calls,
+FK/IK, trajectories, operating states, and reference-frame conversion. Every
+Cartesian command in a step uses the ECM pose from the preceding completed
+scene, and publication frames come from one coherent completed scene.
+
+The frontend and simulation worker use the shared
+[Unix socket process boundary](../dvrk_simulator_base/README.md#unix-socket-process-boundary).
+The private socket carries validated commands, complete-scene snapshots, reliable
+state events, warnings, and the five common diagnostics metrics. ROS publication
+never runs on the physics thread. The existing camera renderer process keeps its
+own PyBullet connection and video transport; image data does not cross the ROS
+control socket. Closing the viewer or stopping ROS cleans up the world and camera
+worker before the frontend reaps the simulation process.
+
+Single-arm node aliases and the standalone PSM preview have been removed. Configure
+robots in a scene and access their CRTK topics by arm name.
 

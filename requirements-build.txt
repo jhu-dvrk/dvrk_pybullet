@@ -1,0 +1,4 @@
+# Headers and tooling for NumPy-enabled PyBullet source builds.
+numpy
+setuptools
+wheel

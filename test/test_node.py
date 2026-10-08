@@ -8,7 +8,9 @@ from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import JointState
 
 from dvrk_arm_description import JointConfig, RobotConfig
+from dvrk_simulator_base.cartesian_command import CartesianCommand
 from dvrk_simulator_base.scene import SceneCamera
+import dvrk_simulator_base.ros_interface as ros_interface_module
 
 import dvrk_pybullet.node as node_module
 
@@ -21,12 +23,10 @@ def _config():
     return RobotConfig(
         name="PSM1",
         type="PSM",
-        model="Virtual/PSM1.urdf.xacro",
         instrument="420006",
         endoscope=None,
         parent_frame="world",
         base_frame="PSM1_base",
-        rcm_frame="PSM1_RCM",
         tool_frame="PSM1_tool",
         adaptor_frame="PSM1_adaptor_link",
         base_position=np.zeros(3),
@@ -45,12 +45,10 @@ def _ecm_config():
     return RobotConfig(
         name="ECM",
         type="ECM",
-        model="Virtual/ECM.urdf.xacro",
         instrument=None,
         endoscope="Si_straight",
         parent_frame="world",
         base_frame="ECM_base",
-        rcm_frame="ECM_RCM",
         tool_frame="ECM_optical",
         adaptor_frame="ECM_adaptor_link",
         base_position=np.zeros(3),
@@ -121,32 +119,33 @@ def test_node_exposes_state_and_command_topics(monkeypatch, tmp_path):
     monkeypatch.setenv("ROS_LOG_DIR", str(tmp_path))
     received = []
 
-    def load_config(model, instrument):
-        received.append((model, instrument))
-        return _config()
+    def load_config(path):
+        received.append(path)
+        return SimpleNamespace(robots=(_config(),))
 
     monkeypatch.setattr(
-        node_module, "load_installed_robot_config", load_config
+        node_module, "load_installed_scene_config", load_config
     )
     rclpy.init()
     node = None
     try:
-        node = node_module.DvrkPyBulletNode(instrument="420006")
-        assert received == [("PSM1", "420006")]
+        node = node_module.DvrkPyBulletNode(scene_path=Path("scene.yaml"))
+        assert received == [Path("scene.yaml")]
+        arm = node.arm_interfaces["PSM1"]
         topics = {
-            node.measured_js.topic_name,
-            node.setpoint_js.topic_name,
-            node.measured_cp.topic_name,
-            node.setpoint_cp.topic_name,
-            node.measured_cv.topic_name,
-            node.jaw_measured_js.topic_name,
-            node.jaw_setpoint_js.topic_name,
-            node.operating_state.topic_name,
-            node.state.topic_name,
-            node.tool_type.topic_name,
-            node.info.topic_name,
-            node.warning.topic_name,
-            node.error.topic_name,
+            arm.measured_js.topic_name,
+            arm.setpoint_js.topic_name,
+            arm.measured_cp.topic_name,
+            arm.setpoint_cp.topic_name,
+            arm.measured_cv.topic_name,
+            arm.jaw_measured_js.topic_name,
+            arm.jaw_setpoint_js.topic_name,
+            arm.operating_state.topic_name,
+            arm.state.topic_name,
+            arm.tool_type.topic_name,
+            arm.info.topic_name,
+            arm.warning.topic_name,
+            arm.error.topic_name,
         }
         assert topics == {
             "/PSM1/measured_js",
@@ -164,13 +163,13 @@ def test_node_exposes_state_and_command_topics(monkeypatch, tmp_path):
             "/PSM1/error",
         }
         subscriptions = {
-            node.servo_jp.topic_name,
-            node.move_jp.topic_name,
-            node.servo_cp.topic_name,
-            node.move_cp.topic_name,
-            node.jaw_servo_jp.topic_name,
-            node.jaw_move_jp.topic_name,
-            node.state_command.topic_name,
+            arm.servo_jp.topic_name,
+            arm.move_jp.topic_name,
+            arm.servo_cp.topic_name,
+            arm.move_cp.topic_name,
+            arm.jaw_servo_jp.topic_name,
+            arm.jaw_move_jp.topic_name,
+            arm.state_command.topic_name,
         }
         assert subscriptions == {
             "/PSM1/servo_jp",
@@ -181,8 +180,8 @@ def test_node_exposes_state_and_command_topics(monkeypatch, tmp_path):
             "/PSM1/jaw/move_jp",
             "/PSM1/state_command",
         }
-        first = node._primary_interface._event_stamp()
-        second = node._primary_interface._event_stamp()
+        first = arm._event_stamp()
+        second = arm._event_stamp()
         first_ns = first.sec * 1_000_000_000 + first.nanosec
         second_ns = second.sec * 1_000_000_000 + second.nanosec
         assert second_ns > first_ns
@@ -195,32 +194,46 @@ def test_node_exposes_state_and_command_topics(monkeypatch, tmp_path):
 
 def test_callbacks_validate_and_enqueue_without_touching_backend(monkeypatch, tmp_path):
     monkeypatch.setenv("ROS_LOG_DIR", str(tmp_path))
-    monkeypatch.setattr(node_module, "load_installed_robot_config", lambda *_: _config())
+    monkeypatch.setattr(node_module, "load_installed_scene_config", lambda *_: SimpleNamespace(robots=(_config(),)))
     rclpy.init()
     node = None
     try:
-        node = node_module.DvrkPyBulletNode()
+        node = node_module.DvrkPyBulletNode(scene_path=Path("scene.yaml"))
+        arm = node.arm_interfaces["PSM1"]
         joint = JointState()
         joint.name = ["pitch", "yaw", "insertion", "roll", "wrist_pitch", "wrist_yaw"]
         joint.position = [0.2, 0.1, 0.12, 0.3, 0.4, 0.5]
-        node._servo_jp_callback(joint)
+        arm._servo_jp_callback(joint)
 
         jaw = JointState()
         jaw.position = [0.25]
-        node._jaw_move_jp_callback(jaw)
+        arm._jaw_move_jp_callback(jaw)
+        commands = arm.commands.drain()
 
         pose = PoseStamped()
         pose.pose.position.x = 0.01
         pose.pose.position.y = 0.02
         pose.pose.position.z = 0.03
         pose.pose.orientation.w = 1.0
-        node._servo_cp_callback(pose)
+        original_pose_from_message = ros_interface_module.pose_from_message
+        converted = []
+
+        def record_conversion(message):
+            converted.append(message)
+            return original_pose_from_message(message)
+
+        monkeypatch.setattr(ros_interface_module, "pose_from_message", record_conversion)
+        invalid = PoseStamped()
+        invalid.pose.orientation.w = 0.0
+        arm._servo_cp_callback(invalid)  # Invalid input is rejected before IPC.
+        arm._servo_cp_callback(pose)
+        assert converted == [invalid, pose]
 
         state = StringStamped()
         state.string = "pause"
-        node._state_command_callback(state)
+        arm._state_command_callback(state)
 
-        commands = node.commands.drain()
+        commands += arm.commands.drain()
         assert [command.channel for command in commands] == [
             "servo_jp",
             "jaw/move_jp",
@@ -231,8 +244,11 @@ def test_callbacks_validate_and_enqueue_without_touching_backend(monkeypatch, tm
             commands[0].payload, [0.1, 0.2, 0.12, 0.3, 0.4, 0.5]
         )
         assert commands[1].payload == 0.25
+        assert isinstance(commands[2].payload, CartesianCommand)
+        target = commands[2].payload.pose
+        assert converted == [invalid, pose]
         np.testing.assert_allclose(
-            [commands[2].payload.p[i] for i in range(3)], [0.01, 0.02, 0.03]
+            target.position, [0.01, 0.02, 0.03]
         )
         assert commands[3].payload == "pause"
     finally:
@@ -288,10 +304,8 @@ def test_node_uses_the_scene_path_supplied_by_the_command_layer(monkeypatch, tmp
     try:
         node = node_module.DvrkPyBulletNode(
             scene_path=Path("ECM_PSM1_PSM2.yaml"),
-            gui=True,
         )
         assert received[0].name == "ECM_PSM1_PSM2.yaml"
-        assert node.gui is True
     finally:
         if node is not None:
             node.destroy_node()

@@ -1,6 +1,7 @@
 """Start one configured dVRK PyBullet scene using the configured Python interpreter."""
 
 from pathlib import Path
+import sys
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -30,7 +31,7 @@ def _start_sim(context):
     script = package_share / "scripts" / "simulator.py"
 
     cmd = [
-        str(selection.path),
+        sys.executable,
         str(script),
         "--config", str(config_path),
         "--scene", str(scene),
@@ -38,11 +39,11 @@ def _start_sim(context):
     actions = [
         LogInfo(
             msg=(
-                f"Starting PyBullet simulator with Python {selection.path} "
+                f"Starting PyBullet simulator with worker Python {selection.path} "
                 f"(selected via {selection.source})"
             )
         ),
-        ExecuteProcess(cmd=cmd, output="screen"),
+        ExecuteProcess(cmd=cmd, output="screen", additional_env={"DVRK_PYBULLET_PYTHON": str(selection.path)}),
     ]
     if LaunchConfiguration("rqt").perform(context).lower() == "true":
         scene_config = resolve_scene_path(config_path, scene)
