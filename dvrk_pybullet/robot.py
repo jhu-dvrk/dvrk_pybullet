@@ -9,19 +9,12 @@ import xml.etree.ElementTree as ET
 
 import numpy as np
 
+from dvrk_simulator_base.urdf_chain import MimicJoint, extract_mimic_joints
 from .errors import PyBulletBackendError
 
 
 def _decode(value: bytes | str) -> str:
     return value.decode("utf-8") if isinstance(value, bytes) else str(value)
-
-
-@dataclass(frozen=True)
-class MimicJoint:
-    joint_name: str
-    source_joint_name: str
-    multiplier: float
-    offset: float
 
 
 @dataclass(frozen=True)
@@ -77,26 +70,20 @@ def load_robot(
         raise PyBulletBackendError(
             f"materialized robot is missing configured joints: {', '.join(missing)}"
         )
-    mimic_joints = []
     try:
-        root = ET.parse(path).getroot()
-    except ET.ParseError as error:
-        raise PyBulletBackendError(f"materialized URDF is invalid XML: {error}") from error
-    for joint in root.findall("joint"):
-        mimic = joint.find("mimic")
-        if mimic is None:
-            continue
-        joint_name = joint.attrib.get("name", "")
-        source_name = mimic.attrib.get("joint", "")
-        if joint_name not in joint_indices or source_name not in joint_indices:
+        parsed_mimics = extract_mimic_joints(path, error_cls=PyBulletBackendError)
+    except PyBulletBackendError:
+        raise
+    except Exception as error:
+        raise PyBulletBackendError(f"materialized URDF is invalid: {error}") from error
+
+    mimic_joints = []
+    for mimic in parsed_mimics:
+        if mimic.joint_name not in joint_indices or mimic.source_joint_name not in joint_indices:
             raise PyBulletBackendError(
-                f"mimic relationship references an unknown joint: {joint_name} -> {source_name}"
+                f"mimic relationship references an unknown joint: {mimic.joint_name} -> {mimic.source_joint_name}"
             )
-        multiplier = float(mimic.attrib.get("multiplier", "1.0"))
-        offset = float(mimic.attrib.get("offset", "0.0"))
-        if not np.all(np.isfinite([multiplier, offset])):
-            raise PyBulletBackendError(f"mimic values must be finite for {joint_name}")
-        mimic_joints.append(MimicJoint(joint_name, source_name, multiplier, offset))
+        mimic_joints.append(mimic)
 
     return LoadedRobot(
         body_id=body_id,

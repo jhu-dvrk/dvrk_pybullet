@@ -8,14 +8,14 @@ from pathlib import Path
 from .errors import PyBulletBackendError
 from dvrk_simulator_base.urdf_materializer import (
     MaterializedUrdf,
+    default_generated_root as _default_generated_root,
     materialize_virtual_robot as _materialize_virtual_robot,
 )
 
 
 def default_generated_root() -> Path:
     """Return the user cache directory for PyBullet artifacts."""
-    cache_root = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-    return (cache_root / "dvrk_pybullet").resolve()
+    return _default_generated_root("dvrk_pybullet")
 
 
 def materialize_virtual_robot(

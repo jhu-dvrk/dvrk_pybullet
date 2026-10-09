@@ -24,7 +24,7 @@ grasp:
   max_force_n: 100.0              # N
   constraint_erp: 0.8
   # Tool-local -Z is proximal, toward the wrist-yaw joint (3 mm).
-  contact_region_offset_m: [0.0, 0.0, 0.003]
+  contact_region_offset_m: [0.0, 0.0, -0.003]
   contact_region_radius_m: 0.008  # 8 mm
 generated_root: null
 scene: null
