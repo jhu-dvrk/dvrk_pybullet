@@ -25,11 +25,12 @@ def test_world_owns_one_connection_and_multiple_kinematic_arms(tmp_path):
     commands = {config.name: CommandMailboxes() for config in configs}
     world = PyBulletWorldRuntime(
         configs,
-        RuntimeOptions(generated_root=tmp_path),
+        RuntimeOptions(headless=True, generated_root=tmp_path, simulation_rate_hz=90.0),
         commands,
     )
     try:
         initial = world.initialize()
+        assert world.pybullet.getPhysicsEngineParameters(world.connection)["fixedTimeStep"] == pytest.approx(1.0 / 90.0)
         assert set(initial) == {"PSM1", "PSM2", "ECM"}
         assert len({arm.robot.body_id for arm in world.arms.values()}) == 3
         assert all(arm.connection == world.connection for arm in world.arms.values())

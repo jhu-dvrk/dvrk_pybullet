@@ -9,12 +9,11 @@ import numpy as np
 
 from dvrk_arm_description import RobotConfig
 from dvrk_simulator_base.command_mailbox import CommandMailboxes
-from dvrk_simulator_base.cartesian_command import CartesianCommand, resolve_cartesian_command
-from dvrk_simulator_base.operating_state import CRTKOperatingState
+from dvrk_simulator_base.cartesian_command import resolve_cartesian_command
+from dvrk_simulator_base.arm_controller import ArmController
 from dvrk_simulator_base.snapshots import ArmSnapshot, OperatingStateSnapshot
 from dvrk_simulator_base.rotations import quaternion_matrix_xyzw
 from dvrk_simulator_base.types import IKResult, JointState, Pose, Twist
-from dvrk_simulator_base.trajectory import JointTrajectory
 
 from .errors import PyBulletBackendError
 from .robot import (
@@ -33,7 +32,7 @@ class RuntimeOptions:
     generated_root: Path | None = None
 
 
-class PyBulletArm:
+class PyBulletArm(ArmController):
     """An arm whose connection and step lifecycle are owned by its world."""
 
     def __init__(
@@ -54,25 +53,7 @@ class PyBulletArm:
         self.robot: LoadedRobot | None = None
         self._tool_link_index: int | None = None
         self._jaw_joint_index: int | None = None
-        self._joint_setpoint = np.array(config.home_position, dtype=float, copy=True)
-        self._joint_velocity = np.zeros_like(self._joint_setpoint)
-        self._jaw_setpoint = 0.0
-        self._jaw_velocity = 0.0
-        self._joint_trajectory: JointTrajectory | None = None
-        self._jaw_trajectory: JointTrajectory | None = None
-        self._move_failure_pending = False
-        self._operating_state_event_pending = False
-        self._operating_state = CRTKOperatingState(CRTKOperatingState.ENABLED)
-        jaw = config.raw.get("robot", {}).get("jaw", {})
-        self._jaw_lower = float(jaw.get("lower", -0.349066))
-        self._jaw_upper = float(jaw.get("upper", 1.39626))
-        self._jaw_speed = float(jaw.get("velocity", 0.4))
-        if not self._jaw_lower <= self._jaw_upper:
-            raise ValueError("jaw lower limit cannot exceed upper limit")
-        if not np.isfinite(self._jaw_speed) or self._jaw_speed <= 0.0:
-            raise ValueError("jaw velocity must be finite and positive")
-
-        self.command_warnings = []
+        super().__init__(config, commands)
         self._sequence = 0
         self._simulation_time = 0.0
 
@@ -130,109 +111,14 @@ class PyBulletArm:
         self._simulation_time += 1.0 / self.options.simulation_rate_hz
         self._sequence += 1
         result = self.snapshot()
-        self._operating_state_event_pending = False
+        self.operating_state_event_pending = False
         return result
 
     def _update_commands(self, now: float, ecm_pose=None, *, has_ecm=False) -> None:
-        if self._move_failure_pending:
-            self._move_failure_pending = False
-        joint_move_started = False
-        jaw_move_started = False
-        for command in self.commands.drain():
-            if command.channel == 'state_command':
-                success, _ = self._operating_state.command(command.payload)
-                if not success:
-                    continue
-                self._operating_state_event_pending = True
-                if not self._operating_state.accepts_motion:
-                    self._cancel_motion()
-                continue
-            if not self._operating_state.accepts_motion:
-                if self._is_move_command(command.channel):
-                    self._move_failure_pending = True
-                continue
-            if command.channel in {'servo_jp', 'move_jp'}:
-                target = np.asarray(command.payload, dtype=float)
-                if not self._valid_joint_target(target):
-                    if command.channel == 'move_jp':
-                        self._move_failure_pending = True
-                    continue
-                if command.channel == 'servo_jp':
-                    self._joint_trajectory = None
-                    self._joint_setpoint = target.copy()
-                    self._joint_velocity = np.zeros_like(target)
-                else:
-                    self._joint_trajectory = JointTrajectory(self._joint_setpoint, target, [joint.velocity for joint in self.config.joints], now)
-                    joint_move_started = True
-                continue
-            if command.channel in {'servo_cp', 'move_cp'}:
-                target = command.payload
-                if isinstance(target, CartesianCommand):
-                    try:
-                        target = resolve_cartesian_command(target, self.config, ecm_pose, has_ecm=has_ecm)
-                    except (TypeError, ValueError, AttributeError) as error:
-                        self.command_warnings.append(f"rejected {command.channel}: {error}")
-                        if command.channel == "move_cp":
-                            self._move_failure_pending = True
-                        continue
-                result = self.compute_ik(target, self._joint_setpoint)
-                if not result.success or not self._valid_joint_target(result.position):
-                    self.command_warnings.append(f"rejected {command.channel}: IK failed or joint limits exceeded")
-                    if command.channel == 'move_cp':
-                        self._move_failure_pending = True
-                    continue
-                if command.channel == 'servo_cp':
-                    self._joint_trajectory = None
-                    self._joint_setpoint = result.position.copy()
-                    self._joint_velocity = np.zeros_like(self._joint_setpoint)
-                else:
-                    self._joint_trajectory = JointTrajectory(self._joint_setpoint, result.position, [joint.velocity for joint in self.config.joints], now)
-                    joint_move_started = True
-                continue
-            if command.channel in {'jaw/servo_jp', 'jaw/move_jp'}:
-                target = float(command.payload)
-                if not np.isfinite(target) or not self._jaw_lower <= target <= self._jaw_upper:
-                    if command.channel == 'jaw/move_jp':
-                        self._move_failure_pending = True
-                    continue
-                if command.channel == 'jaw/servo_jp':
-                    self._jaw_trajectory = None
-                    self._jaw_setpoint = target
-                    self._jaw_velocity = 0.0
-                else:
-                    self._jaw_trajectory = JointTrajectory([self._jaw_setpoint], [target], [self._jaw_speed], now)
-                    jaw_move_started = True
-                continue
-        if self._joint_trajectory is not None and (not joint_move_started):
-            sample = self._joint_trajectory.sample(now)
-            self._joint_setpoint = sample.position.copy()
-            self._joint_velocity = sample.velocity.copy()
-            if sample.complete:
-                self._joint_trajectory = None
-        if self._jaw_trajectory is not None and (not jaw_move_started):
-            sample = self._jaw_trajectory.sample(now)
-            self._jaw_setpoint = float(sample.position[0])
-            self._jaw_velocity = float(sample.velocity[0])
-            if sample.complete:
-                self._jaw_trajectory = None
-
-    def _valid_joint_target(self, target: np.ndarray) -> bool:
-        if target.shape != self._joint_setpoint.shape or not np.all(np.isfinite(target)):
-            return False
-        return all(
-            joint.lower <= value <= joint.upper
-            for value, joint in zip(target, self.config.joints)
+        self.advance_commands(
+            now, self.compute_ik,
+            lambda target: resolve_cartesian_command(target, self.config, ecm_pose, has_ecm=has_ecm),
         )
-
-    @staticmethod
-    def _is_move_command(channel: str) -> bool:
-        return channel in {"move_jp", "move_cp", "jaw/move_jp"}
-
-    def _cancel_motion(self) -> None:
-        self._joint_trajectory = None
-        self._jaw_trajectory = None
-        self._joint_velocity.fill(0.0)
-        self._jaw_velocity = 0.0
 
     def _fk_for_joint_position(self, position: np.ndarray) -> Pose:
         if self.robot is None or self._tool_link_index is None:
@@ -281,9 +167,9 @@ class PyBulletArm:
         if self.robot is None or self._tool_link_index is None:
             raise RuntimeError("PyBullet runtime is not initialized")
         q = np.asarray(
-            self._joint_setpoint if seed is None else seed, dtype=float
+            self.joint_setpoint if seed is None else seed, dtype=float
         ).copy()
-        if not self._valid_joint_target(q):
+        if not self.valid_joint_target(q):
             raise ValueError("IK seed is invalid or outside configured limits")
         lower = np.asarray([joint.lower for joint in self.config.joints])
         upper = np.asarray([joint.upper for joint in self.config.joints])
@@ -293,7 +179,7 @@ class PyBulletArm:
         maximum_step = np.asarray(
             [0.01 if joint.type == "prismatic" else 0.15 for joint in self.config.joints]
         )
-        restore = self._joint_setpoint.copy()
+        restore = self.joint_setpoint.copy()
         use_orientation = len(self.config.joints) >= 6
         position_error = float("inf")
         orientation_error = float("inf")
@@ -356,8 +242,8 @@ class PyBulletArm:
         reset_joint_positions(
             self.pybullet,
             self.robot,
-            self._joint_setpoint,
-            self._joint_velocity,
+            self.joint_setpoint,
+            self.joint_velocity,
         )
 
     def _apply_jaw_setpoint(self) -> None:
@@ -368,18 +254,13 @@ class PyBulletArm:
                 self.pybullet,
                 self.robot,
                 "jaw",
-                self._jaw_setpoint,
-                self._jaw_velocity,
+                self.jaw_setpoint,
+                self.jaw_velocity,
             )
 
     def reset_to_home(self) -> None:
         """Restore this kinematic arm to its initial commanded state."""
-        self._joint_setpoint = np.array(self.config.home_position, dtype=float, copy=True)
-        self._joint_velocity = np.zeros_like(self._joint_setpoint)
-        self._jaw_setpoint = 0.0
-        self._jaw_velocity = 0.0
-        self._joint_trajectory = None
-        self._jaw_trajectory = None
+        self.reset_motion()
         self._apply_setpoints()
         self._apply_jaw_setpoint()
 
@@ -401,7 +282,7 @@ class PyBulletArm:
         velocities = np.asarray([state[1] for state in states], dtype=float)
         measured_js = JointState(names, positions, velocities)
         setpoint_js = JointState(
-            names, self._joint_setpoint, self._joint_velocity
+            names, self.joint_setpoint, self.joint_velocity
         )
 
         link_state = self.pybullet.getLinkState(
@@ -417,12 +298,12 @@ class PyBulletArm:
             if self._jaw_joint_index is not None else None
         )
         state = OperatingStateSnapshot(
-            self._operating_state.state,
-            is_homed=self._operating_state.is_homed,
+            self.operating_state.state,
+            is_homed=self.operating_state.is_homed,
             is_busy=(
-                self._joint_trajectory is not None
-                or self._jaw_trajectory is not None
-                or self._move_failure_pending
+                self.joint_trajectory is not None
+                or self.jaw_trajectory is not None
+                or self.move_failure_pending
             ),
         )
         return ArmSnapshot(
@@ -435,9 +316,9 @@ class PyBulletArm:
             setpoint_cp_world=pose,
             measured_cv_world=twist,
             jaw_measured=jaw,
-            jaw_setpoint=self._jaw_setpoint,
+            jaw_setpoint=self.jaw_setpoint,
             operating_state=state,
-            operating_state_event=self._operating_state_event_pending,
+            operating_state_event=self.operating_state_event_pending,
         )
 
     def shutdown(self) -> None:

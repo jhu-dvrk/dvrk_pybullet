@@ -66,6 +66,7 @@ class PyBulletWorldRuntime:
         if self.connection < 0:
             raise PyBulletBackendError("PyBullet could not create a world connection")
         try:
+            self.pybullet.setTimeStep(1.0 / self.options.simulation_rate_hz, physicsClientId=self.connection)
             self.pybullet.setGravity(0.0, 0.0, -9.81)
             self.scene_objects = load_scene_objects(
                 self.pybullet, self.scene_object_specs, connection=self.connection

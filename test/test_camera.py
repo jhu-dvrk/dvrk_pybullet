@@ -86,3 +86,12 @@ def test_stereo_camera_renders_left_then_right_side_by_side():
     assert options.transport_width == 8
     np.testing.assert_allclose(backend.views[0][0], [0.0, 0.003, 0.0])
     np.testing.assert_allclose(backend.views[1][0], [0.0, -0.003, 0.0])
+
+
+def test_renderer_is_selected_by_runtime_configuration():
+    import pytest
+
+    options = CameraOptions.from_scene(SceneCamera(), renderer='tiny')
+    assert options.renderer == 'tiny'
+    with pytest.raises(ValueError, match='runtime YAML'):
+        CameraOptions.from_scene(SceneCamera(settings={'renderer': 'tiny'}))

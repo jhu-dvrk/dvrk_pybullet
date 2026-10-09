@@ -70,23 +70,23 @@ def test_servo_and_move_commands_are_applied_kinematically(monkeypatch):
     )
     runtime._update_commands(10.0)
     np.testing.assert_allclose(
-        runtime._joint_setpoint, [0.1, 0.2, 0.12, 0.3, 0.4, 0.5]
+        runtime.joint_setpoint, [0.1, 0.2, 0.12, 0.3, 0.4, 0.5]
     )
-    assert runtime._joint_trajectory is None
+    assert runtime.joint_trajectory is None
 
     move = runtime.commands.submit_discrete(
         "move_jp", np.array([0.6, 0.2, 0.12, 0.3, 0.4, 0.5])
     )
     assert move is not None
     runtime._update_commands(20.0)
-    assert runtime._joint_trajectory is not None
+    assert runtime.joint_trajectory is not None
     runtime._update_commands(20.05)
-    assert 0.1 < runtime._joint_setpoint[0] < 0.6
+    assert 0.1 < runtime.joint_setpoint[0] < 0.6
     runtime._update_commands(20.2)
     np.testing.assert_allclose(
-        runtime._joint_setpoint, [0.6, 0.2, 0.12, 0.3, 0.4, 0.5]
+        runtime.joint_setpoint, [0.6, 0.2, 0.12, 0.3, 0.4, 0.5]
     )
-    assert runtime._joint_trajectory is None
+    assert runtime.joint_trajectory is None
 
 
 def test_limits_and_operating_state_gate_motion(monkeypatch):
@@ -96,18 +96,18 @@ def test_limits_and_operating_state_gate_motion(monkeypatch):
     )
     assert invalid is not None
     runtime._update_commands(1.0)
-    assert runtime._move_failure_pending
+    assert runtime.move_failure_pending
 
     disable = runtime.commands.submit_discrete("state_command", "disable")
     assert disable is not None
     runtime._update_commands(2.0)
-    assert not runtime._operating_state.accepts_motion
+    assert not runtime.operating_state.accepts_motion
 
     runtime.commands.submit_servo(
         "servo_jp", np.array([0.1, 0.0, 0.12, 0.0, 0.0, 0.0])
     )
     runtime._update_commands(3.0)
-    np.testing.assert_allclose(runtime._joint_setpoint, _psm1_config().home_position)
+    np.testing.assert_allclose(runtime.joint_setpoint, _psm1_config().home_position)
 
 
 def test_jaw_move_uses_configured_velocity(monkeypatch):
@@ -115,9 +115,9 @@ def test_jaw_move_uses_configured_velocity(monkeypatch):
     move = runtime.commands.submit_discrete("jaw/move_jp", 0.4)
     assert move is not None
     runtime._update_commands(5.0)
-    assert runtime._jaw_trajectory is not None
+    assert runtime.jaw_trajectory is not None
     runtime._update_commands(5.5)
-    assert runtime._jaw_setpoint == pytest.approx(0.2)
+    assert runtime.jaw_setpoint == pytest.approx(0.2)
     runtime._update_commands(6.0)
-    assert runtime._jaw_setpoint == pytest.approx(0.4)
-    assert runtime._jaw_trajectory is None
+    assert runtime.jaw_setpoint == pytest.approx(0.4)
+    assert runtime.jaw_trajectory is None

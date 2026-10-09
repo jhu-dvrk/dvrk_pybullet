@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from dvrk_simulator_base.types import Pose
+from dvrk_simulator_base.video import VideoFrame
 
 
 @dataclass(frozen=True)
@@ -81,8 +82,10 @@ class CameraOptions:
         return self.width * (2 if self.mode == "stereo" else 1)
 
     @classmethod
-    def from_scene(cls, camera) -> "CameraOptions":
+    def from_scene(cls, camera, *, renderer="egl") -> "CameraOptions":
         settings = camera.as_dict()
+        if "renderer" in settings:
+            raise ValueError("set PyBullet renderer in the runtime YAML, not scene.camera")
         if camera.mode not in {"off", "mono", "stereo"}:
             raise ValueError("PyBullet supports off, mono, or stereo scene cameras")
         encoding = str(settings.get("encoding", "rgba8")).lower()
@@ -100,7 +103,7 @@ class CameraOptions:
         return cls(
             enabled=camera.mode != "off" and "unixfd" in transports,
             mode="mono" if camera.mode == "off" else camera.mode,
-            renderer=str(settings.get("renderer", "egl")),
+            renderer=renderer,
             socket_path=str(
                 unixfd.get(
                     "socket_path",
@@ -123,11 +126,7 @@ class CameraOptions:
         )
 
 
-@dataclass(frozen=True)
-class VideoFrame:
-    rgba: np.ndarray
-    simulation_time: float
-    sequence: int
+
 
 
 def view_vectors(optical_pose: Pose) -> tuple[np.ndarray, np.ndarray, np.ndarray]:

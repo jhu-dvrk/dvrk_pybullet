@@ -1,6 +1,5 @@
 """Initialize a PyBullet scene inside the shared IPC simulation worker."""
 
-from dataclasses import replace
 
 from dvrk_simulator_base.command_mailbox import CommandMailboxes
 from dvrk_simulator_base.process_worker import worker_main
@@ -14,7 +13,7 @@ def create_runtime(start):
 
     config = load_simulator_config(start["config"])
     scene = load_installed_scene_config(start["scene"])
-    camera = replace(CameraOptions.from_scene(scene.camera), renderer=config.renderer)
+    camera = CameraOptions.from_scene(scene.camera, renderer=config.renderer)
     commands = {item.name: CommandMailboxes(config.command_queue_capacity) for item in scene.robots}
     runtime = PyBulletWorldRuntime(scene.robots, RuntimeOptions(
         headless=start["headless"], simulation_rate_hz=config.simulation_rate_hz, generated_root=config.generated_root,
