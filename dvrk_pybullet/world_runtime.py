@@ -15,11 +15,13 @@ from dvrk_simulator_base.scene import SceneObject
 
 from .backend import load_pybullet
 from .camera_worker import CameraWorker
+from dvrk_simulator_base.scene import resolve_asset_uri
+
 from .collision_debug import CollisionShapeOverlay
 from .errors import PyBulletBackendError
 from .grasp import GraspManager
 from .runtime import PyBulletArm, RuntimeOptions
-from .scene_objects import load_scene_objects, resolve_asset_uri
+from .scene_objects import load_scene_objects
 
 
 class PyBulletWorldRuntime:
@@ -191,7 +193,8 @@ class PyBulletWorldRuntime:
                 self.collision_debug.add_urdf(arm.robot.body_id, arm.artifact.urdf_path)
             for item in self.scene_objects.values():
                 self.collision_debug.add_urdf(
-                    item.body_id, resolve_asset_uri(item.spec.asset)
+                    item.body_id,
+                    resolve_asset_uri(item.spec.asset, error_cls=PyBulletBackendError),
                 )
         elif not enabled and self.collision_debug is not None:
             self.collision_debug.clear()
