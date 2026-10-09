@@ -37,14 +37,14 @@ ros2 launch dvrk_pybullet open_xr.launch.py
 The launch file starts the simulator, dVRK console video overlay, and optional
 `dvrk_system` together.  `sawOpenXR` retries its video source until the overlay
 socket is available.
-Override GUI mode or select an exercise scene (`tray_cubes.yaml` by default, `peg_board_ring.yaml`, or `peg_board_CUHK.yaml`) when needed:
+Override headless mode or select an exercise scene (`tray_cubes.yaml` by default, `peg_board_ring.yaml`, or `peg_board_CUHK.yaml`) when needed:
 
 ```bash
 ros2 launch dvrk_pybullet open_xr.launch.py \
   scene:=peg_board_ring.yaml \
-  gui:=true
+  headless:=false
 ```
 
 Add `rqt:=true` to start the dVRK Console widget, CRTK Arm panels, and the
-diagnostics panel.  This is independent of `gui:=true`, which only opens the
+diagnostics panel.  This is independent of `headless:=false`, which only opens the
 local PyBullet debug window.

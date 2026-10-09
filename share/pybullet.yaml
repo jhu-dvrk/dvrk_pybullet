@@ -17,7 +17,7 @@ grasp:
   contact_region_offset_m: [0.0, 0.0, -0.003]
   contact_region_radius_m: 0.008  # 8 mm
 generated_root: null
-gui: true
+headless: false
 renderer: egl
 scene: null
 simulation_rate_hz: 120.0

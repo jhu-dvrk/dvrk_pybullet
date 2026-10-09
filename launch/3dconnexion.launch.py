@@ -59,8 +59,8 @@ def generate_launch_description():
             str(patient_cart),
             "--scene",
             LaunchConfiguration("scene"),
-            "--gui",
-            LaunchConfiguration("gui"),
+            "--headless",
+            LaunchConfiguration("headless"),
         ],
         output="screen",
     )
@@ -124,9 +124,9 @@ def generate_launch_description():
                 description="dVRK console ROS namespace",
             ),
             DeclareLaunchArgument(
-                "gui",
-                default_value="false",
-                description="show the local PyBullet debug GUI",
+                "headless",
+                default_value="true",
+                description="run without desktop GUI window",
             ),
             DeclareLaunchArgument(
                 "rqt",

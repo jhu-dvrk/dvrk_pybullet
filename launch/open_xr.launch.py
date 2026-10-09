@@ -46,7 +46,7 @@ def generate_launch_description():
             "--config", str(simulator_config),
             "--scene", str(scene),
             "--scene", LaunchConfiguration("scene"),
-            "--gui", LaunchConfiguration("gui"),
+            "--headless", LaunchConfiguration("headless"),
         ],
         output="screen",
         additional_env={"DVRK_PYBULLET_PYTHON": str(selection.path)},
@@ -115,9 +115,9 @@ def generate_launch_description():
                 description="dVRK console ROS namespace",
             ),
             DeclareLaunchArgument(
-                "gui",
-                default_value="false",
-                description="show the local PyBullet debug GUI",
+                "headless",
+                default_value="true",
+                description="run without desktop GUI window (HMD provides the display)",
             ),
             DeclareLaunchArgument(
                 "rqt", default_value="false",

@@ -43,7 +43,7 @@ def test_pybullet_worker_moving_ecm_cartesian_command_and_state(tmp_path, monkey
     from dvrk_simulator_base.cartesian_frames import compose_pose, view_pose_from_optical
     monkeypatch.delenv("DVRK_SIMULATOR_TEST_TIMEOUT", raising=False)
     config = tmp_path / "pybullet.yaml"
-    config.write_text(f"gui: false\nrenderer: tiny\ngenerated_root: {tmp_path / 'generated'}\n")
+    config.write_text(f"headless: true\nrenderer: tiny\ngenerated_root: {tmp_path / 'generated'}\n")
     scene = tmp_path / "scene.yaml"
     scene.write_text("""scene:
   name: ipc_test
@@ -53,7 +53,7 @@ def test_pybullet_worker_moving_ecm_cartesian_command_and_state(tmp_path, monkey
 """)
     python_bin = resolve_pybullet_python().path
     process = ipc_runtime.SimulationProcess(python_bin, "dvrk_pybullet.simulation_worker", {
-        "config": str(config), "scene": [str(scene)], "gui": False,
+        "config": str(config), "scene": [str(scene)], "headless": True,
     })
     node = FakeNode()
     try:

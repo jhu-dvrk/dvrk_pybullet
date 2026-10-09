@@ -19,7 +19,7 @@ def _psm1_config():
 def test_runtime_produces_coherent_pybullet_snapshot(tmp_path):
     pytest.importorskip("pybullet")
     commands = CommandMailboxes()
-    world = PyBulletWorldRuntime((_psm1_config(),), RuntimeOptions(gui=False, generated_root=tmp_path), {"PSM1": commands})
+    world = PyBulletWorldRuntime((_psm1_config(),), RuntimeOptions(headless=True, generated_root=tmp_path), {"PSM1": commands})
     runtime = world.arms["PSM1"]
     try:
         initial = world.initialize()["PSM1"]

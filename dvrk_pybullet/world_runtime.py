@@ -61,7 +61,7 @@ class PyBulletWorldRuntime:
         }
 
     def initialize(self) -> dict[str, ArmSnapshot]:
-        mode = self.pybullet.GUI if self.options.gui else self.pybullet.DIRECT
+        mode = self.pybullet.DIRECT if self.options.headless else self.pybullet.GUI
         self.connection = self.pybullet.connect(mode)
         if self.connection < 0:
             raise PyBulletBackendError("PyBullet could not create a world connection")
@@ -101,7 +101,7 @@ class PyBulletWorldRuntime:
             snapshots = with_publication_frames(snapshots, [arm.config for arm in self.arms.values()])
             self._frame_snapshots = snapshots
             self._start_camera_worker(snapshots)
-            if self.options.gui:
+            if not self.options.headless:
                 self.pybullet.resetDebugVisualizerCamera(
                     cameraDistance=0.8,
                     cameraYaw=45.0,

@@ -23,8 +23,8 @@ class DvrkPyBulletNode(SimulatorRosNode):
 def _parse_command_line(args):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, help="PyBullet runtime YAML")
-    parser.add_argument("--scene", type=Path, required=True, action="append", help="scene YAML; may be repeated")
-    parser.add_argument("--gui", choices=("true", "false"), help="override desktop viewer setting")
+    parser.add_argument("--scene", type=Path, action="append", help="scene YAML; may be repeated")
+    parser.add_argument("--headless", choices=("true", "false"), help="override desktop viewer setting")
     return parser.parse_args(remove_ros_args(args))
 
 
@@ -34,14 +34,20 @@ def main(args=None):
     path = options.config or Path(get_package_share_directory("dvrk_pybullet")) / "share/pybullet.yaml"
     try:
         config = load_simulator_config(path)
-        scenes = resolve_scene_path(path, options.scene)
+        selection = options.scene or config.scene
+        if not selection:
+            raise ValueError("a scene is required: specify --scene or scene in the runtime YAML")
+        scenes = resolve_scene_path(path, selection)
         python = resolve_pybullet_python(config.generated_root).path
     except (RuntimeError, OSError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
-    gui = config.gui if options.gui is None else options.gui == "true"
-    start = dict(config=str(path.expanduser().resolve()), scene=[str(item) for item in scenes],
-                 gui=gui and "DVRK_SIMULATOR_TEST_TIMEOUT" not in os.environ)
+    headless = config.headless if options.headless is None else options.headless == "true"
+    start = dict(
+        config=str(path.expanduser().resolve()),
+        scene=[str(item) for item in scenes] if isinstance(scenes, (tuple, list)) else str(scenes),
+        headless=headless or "DVRK_SIMULATOR_TEST_TIMEOUT" in os.environ,
+    )
     return run_frontend(
         lambda: DvrkPyBulletNode(scene_path=scenes, state_publish_rate_hz=config.state_publish_rate_hz,
                                 command_queue_capacity=config.command_queue_capacity),

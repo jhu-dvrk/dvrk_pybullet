@@ -81,38 +81,53 @@ def test_unknown_scene_is_reported_without_a_traceback(capsys):
 def test_simulator_config_keeps_runtime_settings_out_of_cli(tmp_path):
     path = tmp_path / "pybullet.yaml"
     path.write_text(
-        "renderer: tiny\ngui: true\nsimulation_rate_hz: 240\n"
+        "renderer: tiny\nheadless: false\nsimulation_rate_hz: 240\n"
         "state_publish_rate_hz: 80\ncommand_queue_capacity: 12\n"
         "scene: ECM_PSM1_PSM2.yaml\n",
         encoding="utf-8",
     )
     config = node_module.load_simulator_config(path)
     assert config.renderer == "tiny"
-    assert config.gui is True
+    assert config.headless is False
     assert config.simulation_rate_hz == 240.0
     assert config.scene == "ECM_PSM1_PSM2.yaml"
 
 
-def test_simulator_config_defaults_to_gui(tmp_path):
+def test_simulator_config_defaults_to_headless_false(tmp_path):
     path = tmp_path / "pybullet.yaml"
     path.write_text("", encoding="utf-8")
-    assert node_module.load_simulator_config(path).gui is True
+    assert node_module.load_simulator_config(path).headless is False
 
 
-def test_simulator_config_requires_boolean_gui_value(tmp_path):
+def test_simulator_config_requires_boolean_headless_value(tmp_path):
     path = tmp_path / "pybullet.yaml"
-    path.write_text("gui: false\n", encoding="utf-8")
+    path.write_text("headless: true\n", encoding="utf-8")
     config = node_module.load_simulator_config(path)
-    assert config.gui is False
+    assert config.headless is True
 
-    path.write_text("gui: 'false'\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="gui must be true or false"):
+    path.write_text("headless: 'false'\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="headless must be true or false"):
         node_module.load_simulator_config(path)
 
 
-def test_scene_argument_is_required():
-    with pytest.raises(SystemExit):
-        node_module._parse_command_line([])
+def test_scene_argument_optional_when_in_config():
+    args = node_module._parse_command_line([])
+    assert args.scene is None
+
+
+def test_scene_required_when_missing_from_cli_and_config(capsys, tmp_path):
+    cfg_path = tmp_path / "pybullet.yaml"
+    cfg_path.write_text("scene: null\n", encoding="utf-8")
+    assert node_module.main(["--config", str(cfg_path)]) == 2
+    error = capsys.readouterr().err
+    assert "a scene is required: specify --scene or scene in the runtime YAML" in error
+
+
+def test_headless_command_line_argument():
+    args = node_module._parse_command_line(["--headless", "true"])
+    assert args.headless == "true"
+    args = node_module._parse_command_line(["--headless", "false"])
+    assert args.headless == "false"
 
 
 def test_node_exposes_state_and_command_topics(monkeypatch, tmp_path):

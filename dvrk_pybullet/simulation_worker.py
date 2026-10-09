@@ -17,7 +17,7 @@ def create_runtime(start):
     camera = replace(CameraOptions.from_scene(scene.camera), renderer=config.renderer)
     commands = {item.name: CommandMailboxes(config.command_queue_capacity) for item in scene.robots}
     runtime = PyBulletWorldRuntime(scene.robots, RuntimeOptions(
-        gui=start["gui"], simulation_rate_hz=config.simulation_rate_hz, generated_root=config.generated_root,
+        headless=start["headless"], simulation_rate_hz=config.simulation_rate_hz, generated_root=config.generated_root,
     ), commands, camera_options=camera, scene_objects=tuple(scene.objects), grasp_config=config.grasp)
     return runtime, commands
 

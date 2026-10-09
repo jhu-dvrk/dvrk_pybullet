@@ -28,12 +28,21 @@ def _start_sim(context):
     selection = resolve_pybullet_python(simulator_config.generated_root)
 
     scene = LaunchConfiguration("scene").perform(context) or simulator_config.scene
+    if not scene:
+        raise ValueError("a scene is required")
     script = package_share / "scripts" / "simulator.py"
+
+    headless_arg = LaunchConfiguration("headless").perform(context)
+    if headless_arg:
+        headless = "true" if headless_arg.lower() == "true" else "false"
+    else:
+        headless = "true" if simulator_config.headless else "false"
 
     cmd = [
         sys.executable,
         str(script),
         "--config", str(config_path),
+        "--headless", str(headless),
         "--scene", str(scene),
     ]
     actions = [
@@ -76,7 +85,12 @@ def generate_launch_description():
             description="Backend runtime configuration YAML",
         ),
         DeclareLaunchArgument(
-            "scene", description="Scene YAML path or installed scene filename",
+            "scene", default_value="",
+            description="Scene YAML path or installed scene filename",
+        ),
+        DeclareLaunchArgument(
+            "headless", default_value="false",
+            description="Run without GUI window (true/false, default: false)",
         ),
         DeclareLaunchArgument(
             "rqt", default_value="false",

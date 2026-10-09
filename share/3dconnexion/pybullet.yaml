@@ -1,6 +1,6 @@
 # Backend settings for the dual-3Dconnexion patient-cart example.
 renderer: egl
-gui: false
+headless: true
 simulation_rate_hz: 120.0
 state_publish_rate_hz: 100.0
 command_queue_capacity: 32

@@ -30,7 +30,7 @@ ros2 launch dvrk_pybullet 3dconnexion.launch.py
 
 The launch file starts PyBullet, `dvrk_system`, the helper that enables the
 console, and a GStreamer preview of the virtual stereo camera. Disable the
-preview with `preview:=false`. Use `scene:=peg_board_ring.yaml`, `gui:=true`,
+preview with `preview:=false`. Use `scene:=peg_board_ring.yaml`, `headless:=false`,
 or `rqt:=true` as needed.
 
 To open the preview manually, run:

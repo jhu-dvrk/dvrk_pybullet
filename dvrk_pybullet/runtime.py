@@ -28,7 +28,7 @@ from .urdf_materializer import MaterializedUrdf, materialize_virtual_robot
 
 @dataclass(frozen=True)
 class RuntimeOptions:
-    gui: bool = False
+    headless: bool = False
     simulation_rate_hz: float = 120.0
     generated_root: Path | None = None
 
