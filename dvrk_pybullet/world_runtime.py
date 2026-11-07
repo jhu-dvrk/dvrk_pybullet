@@ -10,6 +10,7 @@ from typing import Mapping
 import numpy as np
 
 from dvrk_simulator_base.command_mailbox import CommandMailboxes
+from dvrk_simulator_base.configuration import DEFAULT_CONTACT_REGION_OFFSET_M
 from dvrk_arm_description import RobotConfig
 from dvrk_simulator_base.snapshots import ArmSnapshot
 from dvrk_simulator_base.publication_frames import with_publication_frames
@@ -98,7 +99,7 @@ class PyBulletWorldRuntime:
                 break_load_duration=(self.grasp_config.break_load_duration_s if self.grasp_config else 0.05),
                 max_force=self.grasp_config.max_force_n if self.grasp_config else 100.0,
                 constraint_erp=self.grasp_config.constraint_erp if self.grasp_config else 0.8,
-                contact_region_offset=(self.grasp_config.contact_region_offset_m if self.grasp_config else (0.0, 0.0, -0.003)),
+                contact_region_offset=(self.grasp_config.contact_region_offset_m if self.grasp_config else DEFAULT_CONTACT_REGION_OFFSET_M),
                 contact_region_radius=(self.grasp_config.contact_region_radius_m if self.grasp_config else 0.008),
             )
             snapshots = with_publication_frames(snapshots, [arm.config for arm in self.arms.values()])

@@ -1,6 +1,55 @@
 from types import SimpleNamespace
+from pathlib import Path
+
+import pytest
 
 from dvrk_pybullet.grasp import GraspManager
+
+
+def test_default_grasp_region_matches_420006_jaws_without_moving_tool_frame(tmp_path):
+    bullet = pytest.importorskip("pybullet")
+    from dvrk_arm_description import load_robot_config
+    from dvrk_pybullet.robot import load_robot, reset_joint_positions
+    from dvrk_pybullet.urdf_materializer import materialize_virtual_robot
+
+    connection = bullet.connect(bullet.DIRECT)
+    try:
+        config = load_robot_config(
+            Path(__file__).parents[2] / "dvrk_arm_description/arms/PSM1.yaml",
+            instrument="420006",
+        )
+        artifact = materialize_virtual_robot("PSM1", instrument="420006", generated_root=tmp_path)
+        robot = load_robot(bullet, artifact.urdf_path, [joint.name for joint in config.joints])
+        reset_joint_positions(bullet, robot, config.home_position)
+        tool_index = robot.link_indices["PSM1_tool_tip_link"]
+        arm = SimpleNamespace(config=config, robot=robot, tool_link_index=tool_index)
+        tool_pose = bullet.getLinkState(robot.body_id, tool_index, computeForwardKinematics=True)[4:6]
+        # A 3 mm cube held near the distal ends of the closed needle-driver jaws.
+        object_pose = bullet.multiplyTransforms(*tool_pose, (0.0, 0.0, 0.007), (0, 0, 0, 1))
+        shape = bullet.createCollisionShape(bullet.GEOM_BOX, halfExtents=(0.0015,) * 3)
+        object_id = bullet.createMultiBody(
+            baseMass=0.01, baseCollisionShapeIndex=shape,
+            basePosition=object_pose[0], baseOrientation=object_pose[1],
+        )
+        objects = {"cube": SimpleNamespace(body_id=object_id, spec=SimpleNamespace(fixed=False))}
+        bullet.performCollisionDetection()
+        manager = GraspManager(bullet, connection, {"PSM1": arm}, objects, show_markers=False)
+        jaws = manager._jaw_links(arm)
+        assert all(bullet.getContactPoints(
+            bodyA=robot.body_id, bodyB=object_id, linkIndexA=jaw
+        ) for jaw in jaws)
+        old = GraspManager(
+            bullet, connection, {"PSM1": arm}, objects, show_markers=False,
+            contact_region_offset=(0.0, 0.0, -0.003),
+        )
+        assert not old._contact_qualified(arm, object_id, jaws)
+        manager.step({"PSM1": SimpleNamespace(jaw_measured=0.0)})
+        assert manager.attachments["PSM1"].object_name == "cube"
+        assert bullet.getLinkState(robot.body_id, tool_index, computeForwardKinematics=True)[4:6] == tool_pose
+        manager.step({"PSM1": SimpleNamespace(jaw_measured=0.2)})
+        assert not manager.attachments
+    finally:
+        bullet.disconnect(connection)
 
 
 class FakePyBullet:

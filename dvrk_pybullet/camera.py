@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+import time
 from pathlib import Path
 
 import numpy as np
@@ -181,6 +182,7 @@ class PyBulletCamera:
         return np.ascontiguousarray(rgba)
 
     def capture(self, optical_pose: Pose, simulation_time: float) -> VideoFrame:
+        source_timestamp_ns = time.time_ns()
         if self.options.mode == "mono":
             rgba = self._capture_eye(optical_pose)
         else:
@@ -194,6 +196,9 @@ class PyBulletCamera:
                     axis=1,
                 )
             )
-        frame = VideoFrame(rgba, float(simulation_time), self.sequence)
+        frame = VideoFrame(
+            rgba, float(simulation_time), self.sequence,
+            source_timestamp_ns=source_timestamp_ns,
+        )
         self.sequence += 1
         return frame

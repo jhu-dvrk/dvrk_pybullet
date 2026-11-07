@@ -13,8 +13,7 @@ grasp:
   break_load_duration_s: 0.05     # 50 ms above a load threshold
   max_force_n: 100.0              # N
   constraint_erp: 0.8
-  # Tool-local -Z is proximal, toward the wrist-yaw joint (3 mm).
-  contact_region_offset_m: [0.0, 0.0, -0.003]
+  # Inherit the tool-local contact offset from dvrk_simulator_base.
   contact_region_radius_m: 0.008  # 8 mm
 generated_root: null
 headless: false

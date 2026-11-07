@@ -7,6 +7,8 @@ import math
 import time
 from typing import Mapping
 
+from dvrk_simulator_base.configuration import DEFAULT_CONTACT_REGION_OFFSET_M
+
 
 @dataclass(frozen=True)
 class GraspAttachment:
@@ -43,7 +45,7 @@ class GraspManager:
         break_load_duration: float = 0.05,
         max_force: float = 100.0,
         constraint_erp: float = 0.8,
-        contact_region_offset: tuple[float, float, float] = (0.0, 0.0, -0.003),
+        contact_region_offset: tuple[float, float, float] = DEFAULT_CONTACT_REGION_OFFSET_M,
         contact_region_radius: float = 0.008,
     ) -> None:
         self.pybullet = pybullet
