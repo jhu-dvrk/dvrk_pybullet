@@ -130,10 +130,10 @@ class CameraOptions:
 
 
 def view_vectors(optical_pose: Pose) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Return PyBullet eye, target, and up vectors for ECM optical +X/+Z axes."""
+    """Return PyBullet eye, target, and up vectors for ROS optical +Z forward and -Y up axes."""
     eye = optical_pose.position
-    target = eye + optical_pose.orientation[:, 0]
-    up = optical_pose.orientation[:, 2]
+    target = eye + optical_pose.orientation[:, 2]
+    up = -optical_pose.orientation[:, 1]
     return eye, target, up
 
 
@@ -185,7 +185,7 @@ class PyBulletCamera:
             rgba = self._capture_eye(optical_pose)
         else:
             half_baseline = 0.5 * self.options.baseline_m
-            left_offset = optical_pose.orientation[:, 1] * half_baseline
+            left_offset = -optical_pose.orientation[:, 0] * half_baseline
             left_pose = Pose(optical_pose.position + left_offset, optical_pose.orientation)
             right_pose = Pose(optical_pose.position - left_offset, optical_pose.orientation)
             rgba = np.ascontiguousarray(

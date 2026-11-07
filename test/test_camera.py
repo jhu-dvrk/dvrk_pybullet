@@ -35,8 +35,8 @@ def test_optical_axes_map_to_pybullet_view_vectors():
     pose = Pose([1, 2, 3], np.eye(3))
     eye, target, up = view_vectors(pose)
     np.testing.assert_allclose(eye, [1.0, 2.0, 3.0])
-    np.testing.assert_allclose(target, [2.0, 2.0, 3.0])
-    np.testing.assert_allclose(up, [0.0, 0.0, 1.0])
+    np.testing.assert_allclose(target, [1.0, 2.0, 4.0])
+    np.testing.assert_allclose(up, [0.0, -1.0, 0.0])
 
 
 def test_camera_accepts_canonical_dvrk_abstract_socket():
@@ -72,7 +72,7 @@ def test_camera_returns_contiguous_rgba():
     assert frame.rgba.flags.c_contiguous
     assert frame.simulation_time == 1.25
     assert backend.image["physicsClientId"] == 7
-    assert backend.image["lightDirection"] == (1.0, 0.0, 0.0)
+    assert backend.image["lightDirection"] == (0.0, 0.0, 1.0)
     assert backend.image["shadow"] == 1
 
 
@@ -84,8 +84,8 @@ def test_stereo_camera_renders_left_then_right_side_by_side():
     assert frame.rgba.shape == (3, 8, 4)
     assert frame.rgba.flags.c_contiguous
     assert options.transport_width == 8
-    np.testing.assert_allclose(backend.views[0][0], [0.0, 0.003, 0.0])
-    np.testing.assert_allclose(backend.views[1][0], [0.0, -0.003, 0.0])
+    np.testing.assert_allclose(backend.views[0][0], [-0.003, 0.0, 0.0])
+    np.testing.assert_allclose(backend.views[1][0], [0.003, 0.0, 0.0])
 
 
 def test_renderer_is_selected_by_runtime_configuration():

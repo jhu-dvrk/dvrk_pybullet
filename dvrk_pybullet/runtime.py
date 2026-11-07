@@ -79,10 +79,9 @@ class PyBulletArm(ArmController):
 
             tool_names = (
                 f"{self.config.name}_tool_tip_link",
-                self.config.tool_frame,
+                f"{self.config.name}_tip_link" if self.config.type == "ECM" else self.config.tool_frame,
                 f"{self.config.tool_frame}_link",
                 f"{self.config.name}_tip_link",
-                f"{self.config.name}_endoscope_frame_link",
             )
             for name in tool_names:
                 if name in self.robot.link_indices:

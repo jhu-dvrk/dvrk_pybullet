@@ -40,7 +40,7 @@ def pump_until(worker, node, predicate, timeout=5):
 
 
 def test_pybullet_worker_moving_ecm_cartesian_command_and_state(tmp_path, monkeypatch):
-    from dvrk_simulator_base.cartesian_frames import compose_pose, view_pose_from_optical
+    from dvrk_simulator_base.cartesian_frames import compose_pose
     monkeypatch.delenv("DVRK_SIMULATOR_TEST_TIMEOUT", raising=False)
     config = tmp_path / "pybullet.yaml"
     config.write_text(f"headless: true\nrenderer: tiny\ngenerated_root: {tmp_path / 'generated'}\n")
@@ -64,7 +64,7 @@ def test_pybullet_worker_moving_ecm_cartesian_command_and_state(tmp_path, monkey
         pump_until(process, node, lambda: np.allclose(node.states["ECM"].measured_js.position, q))
         frame_pose = node.states["PSM1"].publication_frames.measured_cp
         target = Pose(frame_pose.position + [0.001, 0, 0], frame_pose.orientation)
-        expected = compose_pose(view_pose_from_optical(node.states["ECM"].measured_cp_world), target)
+        expected = compose_pose(node.states["ECM"].measured_cp_world, target)
         node.arm_interfaces["PSM1"].commands.submit_servo("servo_cp", CartesianCommand(target, "ECM_view"))
         pump_until(process, node, lambda: np.linalg.norm(node.states["PSM1"].measured_cp_world.position - expected.position) < 2e-4)
         np.testing.assert_allclose(node.states["PSM1"].publication_frames.measured_cp.position, target.position, atol=2e-4)

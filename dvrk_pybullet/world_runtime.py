@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dvrk_simulator_base.cartesian_frames import optical_pose_from_view
+
 import time
 from typing import Mapping
 
@@ -139,7 +141,7 @@ class PyBulletWorldRuntime:
             joint_positions.append(
                 np.asarray([state[0] for state in states], dtype=float)
             )
-        camera_pose = snapshots["ECM"].measured_cp_world
+        camera_pose = optical_pose_from_view(snapshots["ECM"].measured_cp_world)
         object_poses = tuple(
             self.pybullet.getBasePositionAndOrientation(
                 item.body_id, physicsClientId=self.connection
