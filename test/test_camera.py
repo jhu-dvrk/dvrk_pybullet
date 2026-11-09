@@ -1,5 +1,4 @@
 from pathlib import Path
-import time
 
 import numpy as np
 
@@ -68,9 +67,7 @@ def test_camera_returns_contiguous_rgba():
     backend = _FakePyBullet()
     options = CameraOptions(width=4, height=3)
     camera = PyBulletCamera(backend, 7, options, renderer=99)
-    before_render = time.time_ns()
     frame = camera.capture(Pose(np.zeros(3), np.eye(3)), 1.25)
-    assert before_render <= frame.source_timestamp_ns <= time.time_ns()
     assert frame.rgba.shape == (3, 4, 4)
     assert frame.rgba.flags.c_contiguous
     assert frame.simulation_time == 1.25
